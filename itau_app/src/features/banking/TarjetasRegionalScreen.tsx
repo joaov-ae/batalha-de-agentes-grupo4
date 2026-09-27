@@ -15,6 +15,7 @@ import {
 import { CreditCard } from '../../design-system/organisms/CreditCard';
 import { ServiceTile } from '../../design-system/molecules/ServiceTile';
 import { ItauButton } from '../../design-system/atoms/ItauButton';
+import { useCliente } from '../cliente/ClienteContext';
 
 export interface TarjetasRegionalScreenProps {
   onBack?: () => void;
@@ -25,6 +26,7 @@ export const TarjetasRegionalScreen: React.FC<TarjetasRegionalScreenProps> = ({
   onBack,
   className = '',
 }) => {
+  const cliente = useCliente();
   const [activeTab, setActiveTab] = useState<'tarjetas' | 'cuentas'>('tarjetas');
   const [showBalance, setShowBalance] = useState(true);
   const [toast, setToast] = useState<string | null>(null);
@@ -103,7 +105,7 @@ export const TarjetasRegionalScreen: React.FC<TarjetasRegionalScreenProps> = ({
                 cardName="Black"
                 type="Crédito Adicional"
                 lastDigits="1234"
-                holderName="ROBERTO ALVES"
+                holderName={cliente.nome.toUpperCase()}
               />
             </div>
 

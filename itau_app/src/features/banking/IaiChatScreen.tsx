@@ -16,9 +16,13 @@ import {
   Loader2,
   Play,
   Pause,
+  FileCode2,
+  QrCode,
+  SlidersHorizontal,
+  Target,
+  House,
 } from 'lucide-react';
 import { useVoiceInput, VoicePixIntent } from './useVoiceInput';
-import { FinancialGoal } from './goalsStore';
 import {
   PixFlow,
   PixContato,
@@ -29,15 +33,68 @@ import {
   formatPixDate,
   downloadComprovante,
 } from './PixFlow';
+import {
+  PlanoSalarioData,
+  SaidasBox,
+  SemanaBox,
+  ChartBox,
+  AlternativasBox,
+  PropostaBox,
+  BiometriaOverlay,
+  AvaliacaoCard,
+  logEvento,
+  brl,
+  signed,
+} from './PlanoSalario';
+import { FinancialGoal, ScreenType, CategoryCap } from '../studio/studioTypes';
+import { useCliente } from '../cliente/ClienteContext';
+import { DEFAULT_INVESTMENT_OPTIONS } from '../studio/studioConstants';
 import confetti from 'canvas-confetti';
 
 export interface IaiChatScreenProps {
   onBack: () => void;
+  /** Navegação para outras telas (simulador de gastos, tela inicial...) */
+  onNavigate?: (screen: ScreenType) => void;
   onGoalCreated?: (goal: FinancialGoal) => void;
-  activeGoals?: FinancialGoal[];
+  /** Abre a Área Pix nas abas Copia e Cola ou QR Code */
+  onStartPixArea?: (mode: 'copia_cola' | 'qr_code') => void;
+  /** Saldos compartilhados com a Home e o Extrato */
+  saldos: PixSaldos;
+  /** Pix concluído: o App desconta o valor do saldo */
+  onPixDone?: (comprovante: PixComprovante) => void;
+  /** Pergunta enviada automaticamente ao abrir (landing, extrato) */
+  initialPrompt?: string;
+  /** Abre direto na jornada "+ Nova Missão" */
+  isGoalCreationFlow?: boolean;
+  /** Aberto pelo botão flutuante no dia do salário: jornada "plano do mês" */
+  salaryPlanMode?: boolean;
+  /** Alerta antes de um Pix que aperta o mês (opt-in "Pode me avisar") */
+  pixGuard?: boolean;
+  onPixGuardOptIn?: () => void;
   className?: string;
   skipIntro?: boolean;
 }
+
+// Jornada "plano do mês no dia do salário": cards só na saudação; depois, conversa livre
+interface PlanCard {
+  label: string;
+  primary?: boolean;
+  action: 'semana' | 'saidas' | 'aviso';
+}
+type PlanBlock = 'saidas' | 'grafico-neg' | 'grafico-pos' | 'alternativas' | 'proposta' | 'avaliacao' | 'semana';
+// Etapa que espera uma resposta da cliente (null = conversa normal)
+type PlanStage = null | 'depois_semana' | 'depois_aviso' | 'corte' | 'alternativa' | 'confirmacao' | 'avisar' | 'optin';
+interface PlanOption {
+  id: string;
+  descricao: string;
+  /** Reserva quando o Gemini não está disponível */
+  palavras: string[];
+}
+
+type QuickAction =
+  | { type: 'view_wizard'; label: string }
+  | { type: 'view_home'; label: string }
+  | { type: 'create_goal'; label: string; goal: { title: string; target: number; deadline: string } };
 
 interface ChatMessage {
   id: string;
@@ -58,11 +115,40 @@ interface ChatMessage {
     contato: PixContato;
   };
   pixReceipt?: PixComprovante;
+  /** Resumo de tetos por categoria (jornada de controle de gastos) */
+  categoryCaps?: CategoryCap[];
+  /** Botão de ação abaixo da resposta */
+  quickAction?: QuickAction;
+  /** Respostas sugeridas (jornada de criação de meta) */
+  chips?: string[];
+  /** Bloco visual da jornada do plano do mês */
+  planBlock?: PlanBlock;
+  /** Cards de resposta da jornada do plano do mês (alinhados à direita) */
+  planCards?: PlanCard[];
+  /** Mensagem discreta (rodapé da jornada) */
+  subtle?: boolean;
 }
 
-// Saldos iniciais dos cartões (limites fictícios); o saldo em conta vem da base via /api/pix/saldo
-const CARD_LIMITS = { infinite: 24572.2, black: 13220.98 };
-const FALLBACK_SALDOS: PixSaldos = { conta: 1744.32, limiteConta: 16455, ...CARD_LIMITS };
+// Destaque de valores no texto: [[pos:...]] verde, [[neg:...]] vermelho
+const formatRich = (s: string) =>
+  s
+    .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+    .replace(/\[\[pos:(.*?)\]\]/g, '<b class="text-[#1E8E3E]">$1</b>')
+    .replace(/\[\[neg:(.*?)\]\]/g, '<b class="text-[#C62828]">$1</b>');
+
+
+// Jornada "+ Nova Missão": respostas sugeridas em cada passo
+const GOAL_FLOW_CHIPS: Record<1 | 2 | 3, string[]> = {
+  1: ['Comprar uma casa', 'Viagem internacional', 'Reserva de emergência', 'Trocar de carro'],
+  2: ['R$ 50.000', 'R$ 150.000', 'R$ 700.000'],
+  3: ['12 meses', 'dezembro 2028', 'dezembro 2030'],
+};
+
+const isCategoryCapsRequest = (text: string) => {
+  const t = text.normalize('NFD').replace(/\p{M}/gu, '').toLowerCase();
+  if (t.includes('transporte')) return false;
+  return /categoria|divisao|essenciais|controle de gastos|tetos? (maximo|de gastos)|teto por/.test(t);
+};
 
 // Extrai valor e nome de frases como "Envia um Pix de R$10 para Jessica por favor"
 const parsePixRequest = (text: string): { amount: number | null; nome: string | null } => {
@@ -77,6 +163,9 @@ const parsePixRequest = (text: string): { amount: number | null; nome: string | 
   } else if (integer) {
     amount = parseFloat(integer[1]);
   }
+  // "20 mil", "1,5 mil", "2 mil reais"
+  const mil = text.match(/(\d+(?:[.,]\d+)?)\s*mil\b/i);
+  if (mil) amount = parseFloat(mil[1].replace(',', '.')) * 1000;
   if (amount !== null && !(amount > 0)) amount = null;
 
   const nomeMatch = text.match(/(?:^|\s)(?:para|pra|pro)\s+(?:(?:a|o|minha|meu)\s+)?(\p{L}{2,})/iu);
@@ -173,13 +262,31 @@ const AudioBubble: React.FC<{ url: string; duration: number }> = ({ url, duratio
 
 export const IaiChatScreen: React.FC<IaiChatScreenProps> = ({
   onBack,
+  onNavigate,
+  onGoalCreated,
+  onStartPixArea,
+  saldos,
+  onPixDone,
+  initialPrompt,
+  isGoalCreationFlow = false,
+  salaryPlanMode = false,
+  pixGuard = false,
+  onPixGuardOptIn,
   className = '',
   skipIntro = false,
 }) => {
+  // Cliente exibida (nome fictício, números reais do extrato)
+  const cliente = useCliente();
+
   // Opening preparation stages: 'preparing' -> 'ready' -> 'chat'
   const [openingPhase, setOpeningPhase] = useState<'preparing' | 'ready' | 'chat'>(
-    skipIntro ? 'chat' : 'preparing'
+    skipIntro || isGoalCreationFlow || salaryPlanMode ? 'chat' : 'preparing'
   );
+
+  // Jornada "plano do mês no dia do salário"
+  const [plano, setPlano] = useState<PlanoSalarioData | null>(null);
+  const [bioOpen, setBioOpen] = useState(false);
+  const planoRef = useRef<PlanoSalarioData | null>(null);
 
   // Stepped conversational loading progress for IA.i response:
   const [loadingStep, setLoadingStep] = useState<number>(0);
@@ -198,24 +305,17 @@ export const IaiChatScreen: React.FC<IaiChatScreenProps> = ({
 
   // Fluxo Pix em tela cheia (telas de forma de pagamento → revisão → senha → sucesso)
   const [pixFlow, setPixFlow] = useState<{ amount: number; contato: PixContato } | null>(null);
-  const [saldos, setSaldos] = useState<PixSaldos | null>(null);
+
+  // Jornada "+ Nova Missão": 0 = fora da jornada, 1 = nome, 2 = valor, 3 = prazo
+  const [goalFlowStep, setGoalFlowStep] = useState<0 | 1 | 2 | 3>(0);
+  const goalDraftRef = useRef<{ title: string; target: number }>({ title: '', target: 0 });
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+  const initialPromptSentRef = useRef(false);
 
-  const loadSaldos = async (): Promise<PixSaldos> => {
-    if (saldos) return saldos;
-    try {
-      const res = await fetch('/api/pix/saldo');
-      const data = await res.json();
-      const loaded = { conta: Number(data.saldo), limiteConta: Number(data.limiteConta), ...CARD_LIMITS };
-      setSaldos(loaded);
-      return loaded;
-    } catch {
-      setSaldos(FALLBACK_SALDOS);
-      return FALLBACK_SALDOS;
-    }
-  };
+  // Saldos vêm do App (os mesmos da Home e do Extrato)
+  const loadSaldos = async (): Promise<PixSaldos> => saldos;
 
   const notify = (msg: string) => {
     setToastMessage(msg);
@@ -252,7 +352,7 @@ export const IaiChatScreen: React.FC<IaiChatScreenProps> = ({
         {
           id: `iai-${Date.now()}`,
           sender: 'iai',
-          text: 'Desculpe, Maria, não consegui entender o seu áudio. Pode gravar de novo, um pouco mais perto do microfone, ou digitar o que precisa?',
+          text: `Desculpe, ${cliente.primeiroNome}, não consegui entender o seu áudio. Pode gravar de novo, um pouco mais perto do microfone, ou digitar o que precisa?`,
           timestamp: nowTime(),
         },
       ]);
@@ -267,9 +367,60 @@ export const IaiChatScreen: React.FC<IaiChatScreenProps> = ({
     scrollToBottom();
   }, [messages, isLoading, loadingStep, openingPhase]);
 
+  // Jornada "+ Nova Missão": abre direto na pergunta do nome da meta
+  useEffect(() => {
+    if (!isGoalCreationFlow) return;
+    setGoalFlowStep(1);
+    setMessages([
+      {
+        id: 'goal-step-1',
+        sender: 'iai',
+        text: 'Vamos criar sua meta! Qual o nome dela? Aqui vão alguns exemplos, se quiser usar um:',
+        timestamp: nowTime(),
+        chips: GOAL_FLOW_CHIPS[1],
+      },
+    ]);
+  }, [isGoalCreationFlow]);
+
+  // Jornada do salário: saudação + 3 cards (só o do meio segue o fluxo principal da demo)
+  useEffect(() => {
+    if (!salaryPlanMode) return;
+    logEvento('fab_opened', 'trigger=salary_received');
+    setMessages([
+      { id: 'plan-hello', sender: 'iai', text: `**ia.i**, ${cliente.primeiroNome}! Seu salário caiu.`, timestamp: nowTime() },
+      {
+        id: 'plan-hello-2',
+        sender: 'iai',
+        text: 'Quer ver quanto dá pra gastar por semana e fechar o mês no verde?',
+        timestamp: nowTime(),
+        planCards: [
+          { label: 'Quanto posso gastar por semana com tranquilidade?', action: 'semana' },
+          { label: 'O que ainda vai sair da minha conta este mês?', action: 'saidas' },
+          { label: 'Me avisa antes de um gasto apertar meu mês?', action: 'aviso' },
+        ],
+      },
+    ]);
+    // Carrega os números da jornada enquanto a pessoa lê a saudação
+    fetch('/api/plano-salario')
+      .then((r) => r.json())
+      .then((d: PlanoSalarioData) => {
+        planoRef.current = d;
+        setPlano(d);
+      })
+      .catch(() => {});
+  }, [salaryPlanMode]);
+
+  // Pergunta inicial (vinda da landing ou do extrato) enviada assim que o chat abre
+  useEffect(() => {
+    if (openingPhase !== 'chat' || !initialPrompt || initialPromptSentRef.current) return;
+    initialPromptSentRef.current = true;
+    handleSendMessage(initialPrompt);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [openingPhase, initialPrompt]);
+
   // Initial Opening Animation Transition matching Video 2 (00:08 - 00:11)
   useEffect(() => {
-    if (skipIntro) return;
+    if (skipIntro || isGoalCreationFlow || salaryPlanMode) return;
 
     // Phase 1 -> Phase 2 ("Preparando tudo por aqui..." -> "Pronto, vamos conversar!")
     const timer1 = setTimeout(() => {
@@ -357,11 +508,24 @@ export const IaiChatScreen: React.FC<IaiChatScreenProps> = ({
 
   const handleSendMessage = async (
     textToSend?: string,
-    opts?: { audioMsgId?: string; pixIntent?: VoicePixIntent | null },
+    opts?: { audioMsgId?: string; pixIntent?: VoicePixIntent | null; userShown?: boolean },
   ) => {
     const text = (textToSend || inputValue).trim();
     // Mensagem de voz já está em "loading" (ouvindo o áudio), por isso não é bloqueada aqui
-    if (!text || (isLoading && !opts?.audioMsgId)) return;
+    if (!text || (isLoading && !opts?.audioMsgId && !opts?.userShown)) return;
+
+    if (goalFlowStep > 0) {
+      handleGoalFlowStep(text, opts?.audioMsgId);
+      return;
+    }
+
+    // Jornada do salário esperando uma resposta: se for uma resposta da etapa, a jornada segue;
+    // se não for (outra pergunta), a mensagem já está na conversa e segue para a resposta normal.
+    if (planStageRef.current && !opts?.userShown) {
+      const tratou = await handlePlanText(text, opts?.audioMsgId);
+      if (tratou) return;
+      return handleSendMessage(text, { ...opts, audioMsgId: undefined, userShown: true });
+    }
 
     const currentTime = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 
@@ -380,6 +544,9 @@ export const IaiChatScreen: React.FC<IaiChatScreenProps> = ({
     if (opts?.audioMsgId) {
       // Guarda a transcrição no balão de áudio (não exibida) para histórico e cópia
       setMessages((prev) => prev.map((m) => (m.id === opts.audioMsgId ? { ...m, text } : m)));
+    } else if (opts?.userShown) {
+      // Já exibida pela jornada do salário
+      setInputValue('');
     } else {
       const userMsg: ChatMessage = {
         id: `user-${Date.now()}`,
@@ -468,21 +635,55 @@ export const IaiChatScreen: React.FC<IaiChatScreenProps> = ({
       // Allow user to see conversational loading steps sequentially
       await new Promise((resolve) => setTimeout(resolve, 3800));
 
+      // Respostas prontas montadas com os números reais da cliente (perfil de /api/cliente)
+      const R = cliente;
+      const tetoDe = (prefixo: string) => R.tetos.find((t) => t.categoria.startsWith(prefixo));
+      const tetoEstilo = tetoDe('Lazer');
+      const tetoTransp = tetoDe('Transporte');
+      const tetoReserva = tetoDe('Reserva');
+      const pctTxt = (v: number) => `${v.toFixed(1).replace('.', ',')}%`;
+
+      // Jornada do Studio: controle de gastos por categoria, com tetos em dinheiro e porcentagem
+      if (isCategoryCapsRequest(text)) {
+        setMessages((prev) => [
+          ...prev,
+          {
+            id: `iai-${Date.now()}`,
+            sender: 'iai',
+            text:
+              `${R.primeiroNome}, analisei seu extrato recente e sua renda mensal de **${formatBRL(R.renda.mensal)}**.\n\n` +
+              `Sugiro um **controle de gastos por categoria** com tetos máximos (em dinheiro e percentual), para sobrar uma margem para imprevistos:\n\n` +
+              R.tetos.map((t) => `• **${t.categoria}:** ${formatBRL(t.valor)} (**${pctTxt(t.percentual)}**). ${t.descricao}.`).join('\n') +
+              `\n\nVocê pode parametrizar e ajustar cada um desses valores:`,
+            timestamp: nowTime(),
+            categoryCaps: R.tetos.map((t) => ({
+              category: t.categoria,
+              amount: t.valor,
+              percentage: t.percentual,
+              description: t.descricao,
+              color: t.cor,
+            })),
+          },
+        ]);
+        return;
+      }
+
       // Prompt 1: Faça o Raio-X das minhas contas fixas.
       if (lowerText.includes('raio-x') || lowerText.includes('raio x') || lowerText.includes('contas fixas')) {
+        const diagnostico =
+          R.fixas.percentualRenda > 50
+            ? `💡 **Diagnóstico Ia.i:** suas despesas fixas usam **${pctTxt(R.fixas.percentualRenda)}** da renda, acima dos 50% recomendados. Sobram **${formatBRL(R.sobraAposFixas)}** para o resto do mês: a renda cobre as despesas, mas sem margem para imprevistos. Vale separar uma reserva logo no dia do salário.`
+            : `💡 **Diagnóstico Ia.i:** suas despesas fixas usam **${pctTxt(R.fixas.percentualRenda)}** da renda, dentro dos 50% recomendados. Sobram **${formatBRL(R.sobraAposFixas)}** para o resto do mês.`;
         const iaiMsg: ChatMessage = {
           id: `iai-${Date.now()}`,
           sender: 'iai',
-          text: `Com certeza, Maria! Preparei o Raio-X completo das suas contas fixas deste mês:
-
-• **Moradia e condomínio:** R$ 2.650,00 (26,5%)
-• **Energia elétrica e água:** R$ 340,00 (3,4%)
-• **Internet e telefonia:** R$ 180,00 (1,8%)
-• **Seguros (Cartão Protegido e Habitacional):** R$ 450,00 (4,5%)
-• **TOTAL DE CONTAS FIXAS:** R$ 3.620,00 (36,2% da sua renda líquida)
-
-💡 **Diagnóstico Ia.i:** Excelente! Suas despesas fixas estão bem abaixo do limite recomendado de 50%. Todas estão cadastradas no débito automático do Itaú, garantindo pontualidade e pontos no Minhas Vantagens!`,
+          text:
+            `Com certeza, ${R.primeiroNome}! Preparei o Raio-X das suas contas fixas deste mês:\n\n` +
+            R.fixas.grupos.map((g) => `• **${g.nome}:** ${formatBRL(g.valor)} (${pctTxt(g.percentual)})`).join('\n') +
+            `\n• **TOTAL DE CONTAS FIXAS:** ${formatBRL(R.fixas.total)} (${pctTxt(R.fixas.percentualRenda)} da sua renda)\n\n` +
+            diagnostico,
           timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+          quickAction: { type: 'view_wizard', label: 'Personalizar orçamento no simulador' },
         };
 
         setMessages((prev) => [...prev, iaiMsg]);
@@ -490,36 +691,24 @@ export const IaiChatScreen: React.FC<IaiChatScreenProps> = ({
       }
 
       // Prompt 2: Quanto posso gastar com lazer sem culpa?
-      if (lowerText.includes('lazer') || lowerText.includes('sem culpa')) {
+      // (perguntas de impacto vindas do extrato seguem para o Gemini)
+      if ((lowerText.includes('lazer') || lowerText.includes('sem culpa')) && !lowerText.includes('impacto')) {
+        const teto = tetoEstilo?.valor ?? 0;
         const iaiMsg: ChatMessage = {
           id: `iai-${Date.now()}`,
           sender: 'iai',
-          text: `Maria, com o seu salário na conta e as contas fixas já cobertas, calculamos sua margem de tranquilidade:
-
-• **Teto recomendado para lazer e estilo de vida:** **R$ 2.000,00 no mês** (cerca de 20% do seu salário).
-• **Sugestão de distribuição semanal:** R$ 500,00 por semana para restaurantes, bares, passeios e compras pessoais.
-
-🔒 **Dica inteligente:** Ativei um aviso no seu Personnalité Black para te notificar quando você atingir 80% dessa meta. Assim você aproveita o mês com liberdade e zero culpa!`,
+          text:
+            `${R.primeiroNome}, com o salário na conta e as contas fixas cobertas, calculei sua margem de tranquilidade:\n\n` +
+            `• **Teto para lazer, delivery e compras:** **${formatBRL(teto)} no mês** (${pctTxt(tetoEstilo?.percentual ?? 0)} da renda).\n` +
+            `• **Por semana:** cerca de ${formatBRL(teto / 4.3)}.\n` +
+            `• **Hoje você gasta em média ${formatBRL(R.estiloDeVidaMedio)}/mês** nessas categorias.\n\n` +
+            `🔒 **Dica inteligente:** esse teto já deixa ${formatBRL(tetoReserva?.valor ?? 0)} livres para imprevistos. Posso te avisar quando você chegar a 80% dele.`,
           timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-        };
-
-        setMessages((prev) => [...prev, iaiMsg]);
-        return;
-      }
-
-      // Prompt 3: Programe a divisão do salário entre gastos essenciais e não essenciais.
-      if (lowerText.includes('divisão') || lowerText.includes('divisao') || lowerText.includes('essenciais') || lowerText.includes('não essenciais')) {
-        const iaiMsg: ChatMessage = {
-          id: `iai-${Date.now()}`,
-          sender: 'iai',
-          text: `Perfeito, Maria! Estruturei a programação do seu salário seguindo a regra 50-30-20 personalizada para a sua realidade:
-
-• **50% Gastos Essenciais (R$ 5.000,00):** Moradia, alimentação no supermercado, contas de consumo, saúde e transporte básico.
-• **30% Estilo de Vida e Lazer (R$ 3.000,00):** Restaurantes, delivery, compras pessoais, passeios e cuidados.
-• **20% Futuro e Reserva (R$ 2.000,00):** Aporte automático em CDB 100% CDI com liquidez diária e proteção FGC.
-
-Deseja que eu programe o investimento automático de R$ 2.000,00 no dia que o seu salário cair?`,
-          timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+          quickAction: {
+            type: 'create_goal',
+            label: 'Salvar como meta: Lazer sem culpa',
+            goal: { title: 'Lazer sem culpa', target: teto, deadline: 'este mês' },
+          },
         };
 
         setMessages((prev) => [...prev, iaiMsg]);
@@ -528,16 +717,21 @@ Deseja que eu programe o investimento automático de R$ 2.000,00 no dia que o se
 
       // Prompt 4: Definir meu teto de gastos de transporte do mês.
       if (lowerText.includes('transporte') || lowerText.includes('teto')) {
+        const teto = tetoTransp?.valor ?? 0;
         const iaiMsg: ChatMessage = {
           id: `iai-${Date.now()}`,
           sender: 'iai',
-          text: `Ótimo planejamento, Maria! Analisei seu histórico de mobilidade dos últimos 90 dias:
-
-• **Média histórica:** R$ 720,00/mês (combustível nos postos Ipiranga, Sem Parar e corridas por app).
-• **Teto sugerido para este mês:** **R$ 750,00**.
-
-Criei um controle inteligente de categoria ativo no app. Você receberá avisos em tempo real a cada abastecimento ou corrida no seu cartão Itaú!`,
+          text:
+            `Ótimo planejamento, ${R.primeiroNome}! Analisei seus gastos com mobilidade dos últimos 3 meses:\n\n` +
+            `• **Média histórica:** ${formatBRL(R.transporteMedio)}/mês (combustível e apps de transporte).\n` +
+            `• **Teto sugerido para este mês:** **${formatBRL(teto)}**.\n\n` +
+            `Com o controle ativo, você recebe um aviso ao chegar a 85% do teto.`,
           timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+          quickAction: {
+            type: 'create_goal',
+            label: 'Salvar teto de transporte como meta',
+            goal: { title: 'Teto de transporte', target: teto, deadline: 'este mês' },
+          },
         };
 
         setMessages((prev) => [...prev, iaiMsg]);
@@ -548,18 +742,15 @@ Criei um controle inteligente de categoria ativo no app. Você receberá avisos 
         const iaiMsg: ChatMessage = {
           id: `iai-${Date.now()}`,
           sender: 'iai',
-          text: `Seu perfil mostra que você tem uma rotina financeira bem estruturada e diversificada, Maria. Vou te contar um pouco sobre os principais pontos:
-
-• **Preferências de investimento:** Você demonstra interesse em investir em CDB e já declarou esse objetivo. Isso mostra que você busca segurança e rentabilidade estável para o seu dinheiro.
-
-• **Produtos e serviços:** Você tem dois cartões ativos, incluindo um Personnalité Black Mastercard, que oferece benefícios diferenciados. Além disso, você conta com um financiamento imobiliário vigente, o que indica planejamento de longo prazo.
-
-• **Seguros:** Seu perfil inclui seguros importantes, como o Cartão Protegido e o Habitacional, que ajudam a proteger seu patrimônio e suas transações.
-
-• **Benefícios disponíveis:** Você faz parte do programa Minhas Vantagens Nível 4 e tem vários benefícios ativos, como anuidade grátis, cashback, experiências em viagens, frete e descontos em parceiros.
-
-Se quiser saber mais sobre algum desses pontos ou programar seu mês, é só me contar o que precisa.`,
+          text:
+            `${R.primeiroNome}, olhando o seu extrato dos últimos ${R.historico.meses} meses:\n\n` +
+            `• **Renda recorrente:** ${formatBRL(R.renda.mensal)} por mês (salário de ${formatBRL(R.renda.salario)} + ${formatBRL(R.renda.outras)} de outras entradas).\n\n` +
+            `• **Despesas fixas:** ${formatBRL(R.fixas.total)} (${pctTxt(R.fixas.percentualRenda)} da renda). A maior é ${R.fixas.grupos[0]?.nome.toLowerCase() ?? 'moradia'} (${formatBRL(R.fixas.grupos[0]?.valor ?? 0)}).\n\n` +
+            `• **Folga:** sobram ${formatBRL(R.sobraAposFixas)} (${pctTxt(R.sobraAposFixasPct)}) depois das fixas, e você gasta em média ${formatBRL(R.estiloDeVidaMedio)}/mês com lazer, delivery e compras.\n\n` +
+            `• **Histórico:** a conta ficou no negativo em ${R.historico.mesesNoNegativo} desses meses (${R.historico.quais.join(', ')}). A renda cobre as despesas médias, mas um gasto fora do planejado já é suficiente para negativar.\n\n` +
+            `Quer que eu monte um plano para proteger essa folga?`,
           timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+          quickAction: { type: 'view_wizard', label: 'Montar plano no simulador' },
         };
 
         setMessages((prev) => [...prev, iaiMsg]);
@@ -581,7 +772,7 @@ Se quiser saber mais sobre algum desses pontos ou programar seu mês, é só me 
       const iaiMsg: ChatMessage = {
         id: `iai-${Date.now()}`,
         sender: 'iai',
-        text: data.text || 'Entendi, Maria. Posso te ajudar com detalhes sobre seus cartões Personnalité, CDB ou planejamento de gastos.',
+        text: data.text || `Entendi, ${cliente.primeiroNome}. Posso te ajudar com detalhes sobre seus cartões Personnalité, CDB ou planejamento de gastos.`,
         timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
       };
 
@@ -600,6 +791,464 @@ Se quiser saber mais sobre algum desses pontos ou programar seu mês, é só me 
     } finally {
       clearInterval(stepInterval);
       setIsLoading(false);
+    }
+  };
+
+  const buildGoal = (title: string, target: number, deadline: string, currentAmount = 0): FinancialGoal => {
+    const lower = title.toLowerCase();
+    return {
+      id: `goal-${Date.now()}`,
+      title,
+      category: lower.includes('casa') ? 'moradia' : lower.includes('carro') || lower.includes('transporte') ? 'transporte' : 'geral',
+      targetAmount: target,
+      currentAmount,
+      color: '#EC7000',
+      iconName: lower.includes('casa') ? 'Home' : lower.includes('carro') ? 'Car' : 'Sparkles',
+      deadline,
+      itauShopPointsBonus: 500,
+      suggestedInvestments: DEFAULT_INVESTMENT_OPTIONS,
+      level: 1,
+    };
+  };
+
+  // Jornada "+ Nova Missão": nome → valor → prazo → meta criada na tela inicial (+500 pts Itaú Shop)
+  const handleGoalFlowStep = (text: string, audioMsgId?: string) => {
+    const userMsg: ChatMessage = { id: `user-${Date.now()}`, sender: 'user', text, timestamp: nowTime() };
+    const iai = (msgText: string, extra: Partial<ChatMessage> = {}): ChatMessage => ({
+      id: `iai-${Date.now() + 1}`,
+      sender: 'iai',
+      text: msgText,
+      timestamp: nowTime(),
+      ...extra,
+    });
+    const addMessages = (reply: ChatMessage) => {
+      setMessages((prev) => [
+        ...(audioMsgId ? prev.map((m) => (m.id === audioMsgId ? { ...m, text } : m)) : [...prev, userMsg]),
+        reply,
+      ]);
+      setInputValue('');
+      if (audioMsgId) setIsLoading(false);
+    };
+
+    if (goalFlowStep === 1) {
+      const title = text.charAt(0).toUpperCase() + text.slice(1);
+      goalDraftRef.current = { title, target: 0 };
+      addMessages(iai(`Boa escolha! Qual o valor estimado para "${title}"?`, { chips: GOAL_FLOW_CHIPS[2] }));
+      setGoalFlowStep(2);
+    } else if (goalFlowStep === 2) {
+      const { amount } = parsePixRequest(text);
+      if (!amount) {
+        addMessages(iai('Não entendi o valor. Pode me dizer quanto você precisa juntar? Por exemplo: R$ 50.000.', { chips: GOAL_FLOW_CHIPS[2] }));
+        return;
+      }
+      goalDraftRef.current.target = amount;
+      addMessages(iai('E quando você pretende concluir essa meta?', { chips: GOAL_FLOW_CHIPS[3] }));
+      setGoalFlowStep(3);
+    } else if (goalFlowStep === 3) {
+      const { title, target } = goalDraftRef.current;
+      const goal = buildGoal(title, target, text);
+      onGoalCreated?.(goal);
+      addMessages(
+        iai(
+          `Meta criada! **"${title}"**: ${formatBRL(target)} até ${text}. Já adicionei na sua tela inicial com **+500 pontos no Itaú Shop**! 🎯\n\nA cada aporte você ganha mais pontos para trocar na loja.`,
+          { quickAction: { type: 'view_home', label: 'Ver na tela inicial' } },
+        ),
+      );
+      setGoalFlowStep(0);
+      confetti({ particleCount: 70, spread: 70, origin: { y: 0.6 }, colors: ['#EC7000', '#002244', '#FFC107'] });
+    }
+  };
+
+  // ================= Jornada "plano do mês no dia do salário" =================
+  // Os cards de resposta aparecem só na saudação. Depois da primeira análise a conversa é livre (texto ou voz):
+  // cada etapa termina com uma pergunta e a resposta é interpretada (Gemini) para seguir a jornada.
+  const wait = (ms: number) => new Promise((r) => setTimeout(r, ms));
+  const pushUser = (text: string) =>
+    setMessages((prev) => [...prev, { id: `user-${Date.now()}-${Math.random()}`, sender: 'user', text, timestamp: nowTime() }]);
+  const pushIai = (text: string, extra: Partial<ChatMessage> = {}) =>
+    setMessages((prev) => [
+      ...prev,
+      { id: `iai-${Date.now()}-${Math.random()}`, sender: 'iai', text, timestamp: nowTime(), ...extra },
+    ]);
+
+  // "Analisando os dados": no produto, é onde roda o cálculo determinístico
+  const thinking = async (ms = 1300, texto = 'Analisando os dados') => {
+    setCurrentLoadingSteps([texto]);
+    setLoadingStep(0);
+    setIsLoading(true);
+    await wait(ms);
+    setIsLoading(false);
+  };
+
+  const getPlano = async (): Promise<PlanoSalarioData | null> => {
+    if (planoRef.current) return planoRef.current;
+    try {
+      const d: PlanoSalarioData = await fetch('/api/plano-salario').then((r) => r.json());
+      planoRef.current = d;
+      setPlano(d);
+      return d;
+    } catch {
+      return null;
+    }
+  };
+
+  // Etapa atual da jornada e as respostas que ela aceita
+  const planStageRef = useRef<PlanStage>(null);
+  const setStage = (s: PlanStage) => {
+    planStageRef.current = s;
+  };
+
+  const opcoesDaEtapa = (stage: Exclude<PlanStage, null>, d: PlanoSalarioData): PlanOption[] => {
+    switch (stage) {
+      case 'depois_semana':
+      case 'depois_aviso':
+        return [
+          { id: 'saidas', descricao: 'quer ver o que ainda vai sair da conta até o salário (sim, quero, mostra)', palavras: ['sim', 'quero', 'mostra', 'pode', 'ver'] },
+          { id: 'encerrar', descricao: 'não quer agora (não, agora não, depois, obrigada)', palavras: ['não', 'nao', 'depois', 'obrigad'] },
+        ];
+      case 'corte':
+        return [
+          { id: 'ver_corte', descricao: 'aceita cortar os streamings / quer ver como fica sem eles', palavras: ['ver como fica', 'cortar', 'cancel', 'aceito', 'quero ver'] },
+          { id: 'outro_jeito', descricao: 'quer manter as assinaturas / pergunta se tem outro jeito / não quer cortar', palavras: ['outro', 'manter', 'não quero', 'nao quero', 'alternativa'] },
+        ];
+      case 'alternativa':
+        return [
+          { id: 'reagendar', descricao: 'escolhe reagendar o Pix para o dia do salário', palavras: ['reagend', 'pix', 'primeira', 'mudar a data'] },
+          {
+            id: 'segunda',
+            descricao:
+              d.projecao.saldoFinal < 0 || !d.ajusteGasto
+                ? 'escolhe deixar o limite da conta cobrir'
+                : `escolhe colocar um teto de gastos em ${d.ajusteGasto.categoria}`,
+            palavras: ['limite', 'teto', 'segunda'],
+          },
+          { id: 'nenhuma', descricao: 'não quer nenhuma das duas opções', palavras: ['nenhuma', 'nada', 'não quero', 'nao quero'] },
+        ];
+      case 'confirmacao':
+        return [
+          { id: 'confirmar', descricao: 'confirma o reagendamento (sim, pode, confirma, ok)', palavras: ['sim', 'pode', 'confirm', 'ok', 'bora', 'fechado'] },
+          { id: 'desistir', descricao: 'não quer reagendar agora (não, espera, cancelar)', palavras: ['não', 'nao', 'cancel', 'espera'] },
+        ];
+      case 'avisar':
+        return [
+          { id: 'avisar', descricao: 'quer avisar quem recebe o Pix (sim, avisa, manda)', palavras: ['sim', 'avis', 'manda', 'quero'] },
+          { id: 'nao_precisa', descricao: 'não precisa avisar', palavras: ['não', 'nao', 'precisa'] },
+        ];
+      case 'optin':
+        return [
+          { id: 'optin', descricao: 'aceita receber o aviso antes de um gasto apertar o mês (sim, pode, quero)', palavras: ['sim', 'pode', 'quero', 'avis'] },
+          { id: 'recusar', descricao: 'não quer receber o aviso agora', palavras: ['não', 'nao', 'agora não', 'depois'] },
+        ];
+    }
+  };
+
+  // Classifica a resposta livre; sem Gemini (ou com erro), usa palavras-chave
+  const classificar = async (texto: string, stage: Exclude<PlanStage, null>, opcoes: PlanOption[]): Promise<string | null> => {
+    try {
+      const r = await fetch('/api/plano-salario/intencao', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ texto, etapa: stage, opcoes: opcoes.map(({ id, descricao }) => ({ id, descricao })) }),
+      }).then((res) => res.json());
+      if (r.origem === 'gemini') return r.opcao ?? null;
+    } catch {
+      /* segue para as palavras-chave */
+    }
+    const t = texto.toLowerCase();
+    return opcoes.find((o) => o.palavras.some((p) => t.includes(p)))?.id ?? null;
+  };
+
+  /** Resposta livre durante a jornada. Devolve true se virou uma ação da jornada. */
+  const handlePlanText = async (text: string, audioMsgId?: string): Promise<boolean> => {
+    const stage = planStageRef.current;
+    const d = planoRef.current;
+    if (!stage || !d) return false;
+    if (audioMsgId) setMessages((prev) => prev.map((m) => (m.id === audioMsgId ? { ...m, text } : m)));
+    else {
+      pushUser(text);
+      setInputValue('');
+    }
+    setCurrentLoadingSteps(['Entendendo sua resposta']);
+    setLoadingStep(0);
+    setIsLoading(true);
+    const opcao = await classificar(text, stage, opcoesDaEtapa(stage, d));
+    setIsLoading(false);
+    if (!opcao) return false; // não é uma resposta da etapa: o chat responde normalmente (a pessoa já aparece na conversa)
+    logEvento('intent_classified', `${stage}=${opcao}`);
+    await runPlanAction(opcao, text, true);
+    return true;
+  };
+
+  const handlePlanCard = (card: PlanCard, msgId: string) => {
+    // Os cards (só na saudação) somem depois do toque
+    setMessages((prev) => prev.map((m) => (m.id === msgId ? { ...m, planCards: undefined } : m)));
+    runPlanAction(card.action, card.label, false);
+  };
+
+  const perguntarOptin = async () => {
+    await wait(700);
+    pushIai('Pra manter o mês no verde, posso te dar um toque antes de algum gasto apertar?');
+    setStage('optin');
+  };
+
+  const runPlanAction = async (action: string, label: string, userShown: boolean) => {
+    if (!userShown) pushUser(label);
+    const d = await getPlano();
+    if (!d) {
+      notify('Não consegui carregar os dados do seu extrato agora. Tente de novo em instantes.');
+      return;
+    }
+    const p = d.pix;
+    setStage(null);
+
+    // ---------- Card 1: quanto posso gastar por semana ----------
+    if (action === 'semana') {
+      logEvento('card_selected', 'weekly_budget');
+      await thinking();
+      const s = d.semana;
+      pushIai(
+        `Até o seu próximo salário, em ${d.cliente.proximoSalario.formatado}, são ${s.diasAteSalario} dias. Já descontando as contas que ainda vão sair (${brl(d.totalSaidas)}), dá pra gastar até **${brl(s.limiteSemanalHoje)} por semana** com tranquilidade.`,
+        { planBlock: 'semana' },
+      );
+      await wait(500);
+      pushIai(
+        d.projecao.saldoFinal < 0
+          ? `Mas atenção: mesmo no ritmo de costume, a conta fica negativa perto de ${d.projecao.diaQueAcabaFormatado}. Quer que eu te mostre o que ainda vai sair da sua conta e como resolver?`
+          : `Nesse ritmo você chega ao salário com ${brl(d.projecao.saldoFinal)}${d.semMargem ? ', uma folga pequena para qualquer imprevisto' : ''}. Quer que eu te mostre o que ainda vai sair da sua conta?`,
+      );
+      setStage('depois_semana');
+      return;
+    }
+
+    // ---------- Card 3: me avisa antes de um gasto apertar o mês ----------
+    if (action === 'aviso') {
+      logEvento('card_selected', 'spending_alert');
+      await thinking();
+      const exemplo = Math.max(50, Math.ceil((Math.max(0, d.projecao.saldoFinal) + 100) / 50) * 50);
+      let sim: any = null;
+      try {
+        sim = await fetch('/api/pix/simular', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ valor: exemplo }),
+        }).then((r) => r.json());
+      } catch {
+        sim = null;
+      }
+      pushIai(
+        `Claro! Hoje sua folga até o salário é de **${brl(d.projecao.saldoFinal)}**. ` +
+          (sim?.fica_negativo
+            ? `Um gasto de ${brl(exemplo)} fora do planejado já deixaria a conta [[neg:negativa a partir de ${sim.formatado?.dia_que_acaba_depois || 'antes do salário'}]]${sim.formatado?.juros_adicionais ? `, com cerca de ${sim.formatado.juros_adicionais} a mais de juros` : ''}.`
+            : `Um gasto de ${brl(exemplo)} fora do planejado ainda cabe, mas qualquer coisa acima disso aperta o mês.`),
+        { planBlock: 'grafico-neg' },
+      );
+      onPixGuardOptIn?.();
+      logEvento('alert_opt_in', 'pix_guard=on source=card');
+      await wait(600);
+      pushIai(
+        'Pronto, **aviso ativado** ✅. Antes de um Pix que aperte o mês, eu te mostro o impacto e você decide se continua. Quer que eu te mostre também o que ainda vai sair da sua conta até o salário?',
+      );
+      setStage('depois_aviso');
+      return;
+    }
+
+    if (action === 'encerrar') {
+      await wait(400);
+      pushIai('Combinado! Se precisar, é só me chamar por aqui. 🧡');
+      return;
+    }
+
+    // ---------- Card 2 (fluxo principal): saídas do mês + projeção + sugestão de corte ----------
+    if (action === 'saidas') {
+      logEvento('card_selected', 'upcoming_outflows');
+      await thinking();
+      pushIai(`Até o seu próximo salário, em ${d.cliente.proximoSalario.formatado}, ainda vão sair:`, { planBlock: 'saidas' });
+      await wait(600);
+      pushIai(
+        d.projecao.saldoFinal < 0
+          ? `Com isso e os seus gastos de costume, a previsão é fechar o mês com [[neg:${brl(Math.abs(d.projecao.saldoFinal))} no negativo]] e pagar juros do limite.`
+          : d.semMargem
+            ? `Com isso e os seus gastos de costume, a previsão é fechar o mês com só [[neg:${brl(d.projecao.saldoFinal)} de folga]]. A renda cobre as despesas, mas um gasto fora do planejado já leva a conta ao negativo.`
+            : `Com isso e os seus gastos de costume, a previsão é fechar o mês com [[pos:${brl(d.projecao.saldoFinal)} sobrando]].`,
+        { planBlock: 'grafico-neg' },
+      );
+      logEvento('risk_projected', `end_balance=${d.projecao.saldoFinal}`);
+      await wait(700);
+      const c = d.corte;
+      if (c) {
+        const lista = c.servicos.join(', ').replace(/, ([^,]*)$/, ' e $1');
+        pushIai(
+          c.resolve
+            ? `Tem um ajuste pequeno que ${d.projecao.saldoFinal < 0 ? 'muda isso' : 'aumenta essa folga'}: você tem ${c.servicos.length} serviços de vídeo (${lista}). Ficando só com ${c.mantido}, você economiza **${brl(c.economiaMensal)} por mês** e fecha o mês com [[pos:${brl(c.saldoFinalComCorte)} sobrando]].\n\nQuer ver como fica sem esses streamings, ou prefere outro jeito?`
+            : `Tem um ajuste pequeno que ajuda: você tem ${c.servicos.length} serviços de vídeo (${lista}). Ficando só com ${c.mantido}, você economiza **${brl(c.economiaMensal)} por mês** e libera ${brl(c.ganhoAteSalario)} até o salário, mas ainda fecharia com [[neg:${signed(c.saldoFinalComCorte)}]].\n\nQuer ver como fica sem esses streamings, ou prefere outro jeito?`,
+        );
+        setStage('corte');
+      } else if (p) {
+        pushIai('Achei um jeito de melhorar isso sem mexer nas suas assinaturas. Quer ver?');
+        setStage('corte');
+      }
+      return;
+    }
+
+    // Aceitou o corte dos streamings
+    if (action === 'ver_corte' && d.corte) {
+      logEvento('suggestion_accepted', 'type=cancel_subscription');
+      fetch('/api/plano-salario/decisao', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ajusteId: d.corte.ajusteId, aceito: true }),
+      }).catch(() => {});
+      await thinking(900);
+      const cancelar = d.corte.servicos.filter((s) => s !== d.corte!.mantido).join(' e ');
+      pushIai(
+        `Fica assim: mantendo o ${d.corte.mantido} e cancelando ${cancelar}, você economiza **${brl(d.corte.economiaMensal)} por mês** e fecha este mês com [[${d.corte.saldoFinalComCorte >= 0 ? 'pos' : 'neg'}:${signed(d.corte.saldoFinalComCorte)}]]. O cancelamento é feito no app de cada serviço.`,
+      );
+      await perguntarOptin();
+      return;
+    }
+
+    // Recusou o corte → alternativas
+    if (action === 'outro_jeito' || (action === 'ver_corte' && !d.corte)) {
+      logEvento('suggestion_rejected', 'type=cancel_subscription');
+      if (d.corte) {
+        fetch('/api/plano-salario/decisao', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ ajusteId: d.corte.ajusteId, aceito: false }),
+        }).catch(() => {});
+      }
+      if (!p) {
+        pushIai('Por enquanto não encontrei outra saída no seu extrato.');
+        await perguntarOptin();
+        return;
+      }
+      await thinking();
+      pushIai('Claro! Achei duas saídas que não mexem nas suas assinaturas:', { planBlock: 'alternativas' });
+      logEvento('alternatives_offered', 'n=2');
+      await wait(400);
+      pushIai('Qual dessas faz mais sentido pra você?');
+      setStage('alternativa');
+      return;
+    }
+
+    // Segunda alternativa: teto numa categoria (sem margem) ou limite da conta (negativo)
+    if (action === 'segunda') {
+      logEvento('alternative_selected', d.projecao.saldoFinal < 0 || !d.ajusteGasto ? 'overdraft' : 'category_cap');
+      await thinking(900);
+      if (d.projecao.saldoFinal >= 0 && d.ajusteGasto) {
+        pushIai(
+          `Combinado! Coloquei um teto de **${brl(d.ajusteGasto.tetoSugerido)}** em ${d.ajusteGasto.categoria} este mês. Quando você chegar perto dele, eu te aviso, assim esse gasto não vira o imprevisto que leva a conta ao negativo.`,
+        );
+      } else {
+        pushIai(
+          `Tudo bem. O limite da conta cobre esses dias, com cerca de ${brl(d.limiteConta.juros)} de juros. Se mudar de ideia, reagendar o Pix continua disponível.`,
+        );
+      }
+      await perguntarOptin();
+      return;
+    }
+
+    if (action === 'nenhuma' || action === 'desistir') {
+      await wait(500);
+      pushIai('Sem problemas, não mexi em nada. Se quiser rever depois, é só me chamar.');
+      await perguntarOptin();
+      return;
+    }
+
+    // Reagendar o Pix → proposta com impacto nos dois meses
+    if (action === 'reagendar' && p) {
+      logEvento('alternative_selected', 'reschedule_pix');
+      await thinking(900);
+      pushIai('Vou reagendar assim:', { planBlock: 'proposta' });
+      await wait(400);
+      pushIai('Posso confirmar o reagendamento?');
+      setStage('confirmacao');
+      return;
+    }
+
+    // Confirmação → biometria
+    if (action === 'confirmar' && p) {
+      setBioOpen(true);
+      logEvento('auth_requested', 'biometrics');
+      return;
+    }
+
+    if (action === 'avisar' || action === 'nao_precisa') {
+      if (action === 'avisar' && p) {
+        const texto = `Oi! Reagendei o Pix de ${brl(p.valor)} para o dia ${p.novaData}.`;
+        // O banco não envia a mensagem: abre o compartilhamento do celular
+        try {
+          if (navigator.share) await navigator.share({ text: texto });
+          else {
+            await navigator.clipboard?.writeText(texto);
+            notify('Mensagem copiada para você compartilhar');
+          }
+        } catch {
+          /* compartilhamento cancelado */
+        }
+        logEvento('share_opened');
+      }
+      await perguntarOptin();
+      return;
+    }
+
+    if (action === 'optin' || action === 'recusar') {
+      if (action === 'optin') {
+        logEvento('alert_opt_in', 'pix_guard=on');
+        onPixGuardOptIn?.();
+      }
+      await wait(700);
+      pushIai(action === 'optin' ? 'Combinado! Vou ficar de olho. 👀' : 'Tudo bem! Se mudar de ideia, é só me pedir.');
+      pushIai('', { planBlock: 'avaliacao' });
+    }
+  };
+
+  // Biometria confirmada → reagenda o Pix e recalcula a projeção
+  const handleBiometriaOk = async () => {
+    setBioOpen(false);
+    const d = planoRef.current;
+    if (!d?.pix) return;
+    const p = d.pix;
+    await fetch('/api/plano-salario/reagendar', { method: 'POST' }).catch(() => {});
+    logEvento('pix_rescheduled', `${p.dataAtual} -> ${p.novaData}`);
+    await thinking(700);
+    pushIai(`Pronto! O Pix de ${brl(p.valor)} vai sair no dia ${p.novaData}. ✅`);
+    pushIai(
+      p.saldoFinalMes >= 0
+        ? `Seu mês agora fecha com [[pos:${brl(p.saldoFinalMes)} sobrando]], e dá pra gastar até **${brl(p.limiteSemanal)} por semana**.`
+        : `Seu mês agora fecha com [[neg:${signed(p.saldoFinalMes)}]].`,
+      { planBlock: 'grafico-pos' },
+    );
+    logEvento('projection_updated', `end_balance=${p.saldoFinalMes}`);
+    await wait(500);
+    pushIai('Quer avisar quem recebe o Pix da nova data?');
+    setStage('avisar');
+  };
+
+  const handleAvaliacao = async (voto: 'up' | 'down', motivo: string) => {
+    logEvento('feedback', `${voto} · ${motivo}`);
+    await wait(500);
+    pushIai(
+      'No fim do mês, eu confiro no extrato se o negativo foi evitado. Esse é o resultado que conta, não o clique.',
+      { subtle: true },
+    );
+    logEvento('month_end_check', 'scheduled');
+  };
+
+  const handleClose = () => {
+    // Fechar a jornada pelo X conta como recusa
+    if (salaryPlanMode) logEvento('chat_closed');
+    onBack();
+  };
+
+  const handleQuickAction = (action: QuickAction, msgId: string) => {
+    if (action.type === 'view_wizard') onNavigate?.('wizard');
+    else if (action.type === 'view_home') onNavigate?.('hub');
+    else if (action.type === 'create_goal') {
+      onGoalCreated?.(buildGoal(action.goal.title, action.goal.target, action.goal.deadline));
+      // Evita salvar a mesma meta duas vezes
+      setMessages((prev) => prev.map((m) => (m.id === msgId ? { ...m, quickAction: undefined } : m)));
+      notify(`Meta "${action.goal.title}" adicionada à tela inicial (+500 pts)`);
     }
   };
 
@@ -640,11 +1289,7 @@ Se quiser saber mais sobre algum desses pontos ou programar seu mês, é só me 
   // Tela 6 → chat: volta para a conversa com o comprovante
   const handlePixDone = (comprovante: PixComprovante, action: 'voltar' | 'nova') => {
     setPixFlow(null);
-    setSaldos((prev) => {
-      const base = prev || FALLBACK_SALDOS;
-      const key = comprovante.fonte.id;
-      return { ...base, [key]: base[key] - comprovante.amount };
-    });
+    onPixDone?.(comprovante);
 
     confetti({
       particleCount: 80,
@@ -658,7 +1303,7 @@ Se quiser saber mais sobre algum desses pontos ou programar seu mês, é só me 
       {
         id: `receipt-${Date.now()}`,
         sender: 'iai',
-        text: `Pronto, Maria! Seu Pix de **${formatBRL(comprovante.amount)}** para **${comprovante.contato.primeiroNome}** foi enviado. Aqui está o comprovante:`,
+        text: `Pronto, ${cliente.primeiroNome}! Seu Pix de **${formatBRL(comprovante.amount)}** para **${comprovante.contato.primeiroNome}** foi enviado. Aqui está o comprovante:`,
         timestamp: nowTime(),
         pixReceipt: comprovante,
       },
@@ -745,16 +1390,22 @@ Se quiser saber mais sobre algum desses pontos ou programar seu mês, é só me 
         <PixFlow
           amount={pixFlow.amount}
           contato={pixFlow.contato}
-          saldos={saldos || FALLBACK_SALDOS}
+          saldos={saldos}
+          pixGuard={pixGuard}
           onClose={() => setPixFlow(null)}
           onDone={handlePixDone}
         />
       )}
 
+      {/* Confirmação biométrica do reagendamento (jornada do salário) */}
+      {bioOpen && plano && (
+        <BiometriaOverlay plano={plano} onConfirm={handleBiometriaOk} onCancel={() => setBioOpen(false)} />
+      )}
+
       {/* Header matching Video 2: Back (<), Pill "Hoje", Close (X) */}
       <header className="sticky top-0 z-20 bg-[#FAF9F7]/95 backdrop-blur-md px-4 py-3 flex items-center justify-between border-b border-slate-100 shrink-0">
         <button
-          onClick={onBack}
+          onClick={handleClose}
           type="button"
           className="w-8 h-8 rounded-full flex items-center justify-center text-slate-600 hover:text-slate-900 transition-colors cursor-pointer"
           aria-label="Voltar"
@@ -768,7 +1419,7 @@ Se quiser saber mais sobre algum desses pontos ou programar seu mês, é só me 
         </div>
 
         <button
-          onClick={onBack}
+          onClick={handleClose}
           type="button"
           className="w-8 h-8 rounded-full flex items-center justify-center text-slate-600 hover:text-slate-900 transition-colors cursor-pointer"
           aria-label="Fechar conversa"
@@ -779,7 +1430,8 @@ Se quiser saber mais sobre algum desses pontos ou programar seu mês, é só me 
 
       {/* Messages Scroll Area */}
       <div className="flex-1 min-h-0 overflow-y-auto px-4 py-4 space-y-5">
-        {/* Initial Assistant Welcoming Message & Suggestion Cards (Video 2 00:12) */}
+        {/* Initial Assistant Welcoming Message & Suggestion Cards (Video 2 00:12) — oculto na jornada "+ Nova Missão" */}
+        {!isGoalCreationFlow && !salaryPlanMode && (
         <div className="flex items-start gap-2.5">
           <div className="w-6 h-6 flex items-center justify-center shrink-0 mt-0.5">
             <Sparkles className="w-4 h-4 text-[#EC7000] fill-[#EC7000]" />
@@ -787,7 +1439,7 @@ Se quiser saber mais sobre algum desses pontos ou programar seu mês, é só me 
 
           <div className="space-y-3 flex-1 max-w-[320px]">
             <p className="text-xs font-semibold text-slate-800 leading-snug">
-              ia.i, Maria! Vamos programar os gastos deste mês?
+              ia.i, {cliente.primeiroNome}! Vamos programar os gastos deste mês?
             </p>
 
             {/* Suggestion Cards */}
@@ -834,12 +1486,13 @@ Se quiser saber mais sobre algum desses pontos ou programar seu mês, é só me 
             </div>
           </div>
         </div>
+        )}
 
         {/* Dynamic Chat Messages */}
         {messages.map((msg) => (
           <div key={msg.id} className="animate-fadeIn">
             {msg.sender === 'user' ? (
-              /* User Message - Right Aligned with "MA" Avatar */
+              /* User Message - Right Aligned with the client avatar */
               <div className="flex items-end justify-end gap-2.5">
                 <div className="bg-[#EBEFF4] border border-slate-200/80 rounded-2xl rounded-tr-xs px-4 py-2.5 max-w-[280px] shadow-2xs">
                   {msg.audio ? (
@@ -855,9 +1508,9 @@ Se quiser saber mais sobre algum desses pontos ou programar seu mês, é só me 
                   </div>
                 </div>
 
-                {/* Dark User Avatar "MA" (Maria) */}
-                <div className="w-8 h-8 rounded-full bg-[#1A1F2C] text-white font-bold text-xs flex items-center justify-center shrink-0 shadow-xs" title="Maria">
-                  MA
+                {/* Dark User Avatar (iniciais da cliente) */}
+                <div className="w-8 h-8 rounded-full bg-[#1A1F2C] text-white font-bold text-xs flex items-center justify-center shrink-0 shadow-xs" title={cliente.nome}>
+                  {cliente.iniciais}
                 </div>
               </div>
             ) : (
@@ -869,17 +1522,48 @@ Se quiser saber mais sobre algum desses pontos ou programar seu mês, é só me 
 
                 <div className="flex-1 max-w-[340px] space-y-3">
                   <div className="text-xs text-slate-800 leading-relaxed space-y-2 whitespace-pre-line">
-                    {msg.text.split('\n\n').filter(Boolean).map((paragraph, idx) => {
-                      const formatted = paragraph.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
-                      return (
-                        <p
-                          key={idx}
-                          dangerouslySetInnerHTML={{ __html: formatted }}
-                          className="text-slate-800 leading-relaxed"
-                        />
-                      );
-                    })}
+                    {msg.text.split('\n\n').filter(Boolean).map((paragraph, idx) => (
+                      <p
+                        key={idx}
+                        dangerouslySetInnerHTML={{ __html: formatRich(paragraph) }}
+                        className={msg.subtle ? 'text-[11px] text-slate-500 leading-relaxed' : 'text-slate-800 leading-relaxed'}
+                      />
+                    ))}
                   </div>
+
+                  {/* Blocos da jornada "plano do mês no dia do salário" */}
+                  {msg.planBlock && plano && (
+                    <>
+                      {msg.planBlock === 'saidas' && <SaidasBox plano={plano} />}
+                      {msg.planBlock === 'semana' && <SemanaBox plano={plano} />}
+                      {msg.planBlock === 'grafico-neg' && <ChartBox plano={plano} tipo="neg" />}
+                      {msg.planBlock === 'grafico-pos' && <ChartBox plano={plano} tipo="pos" />}
+                      {msg.planBlock === 'alternativas' && <AlternativasBox plano={plano} />}
+                      {msg.planBlock === 'proposta' && <PropostaBox plano={plano} />}
+                      {msg.planBlock === 'avaliacao' && <AvaliacaoCard onSend={handleAvaliacao} />}
+                    </>
+                  )}
+
+                  {/* Cards de resposta da jornada: frase em primeira pessoa, alinhados à direita */}
+                  {msg.planCards && (
+                    <div className="flex flex-col items-end gap-2 pt-1">
+                      {msg.planCards.map((card) => (
+                        <button
+                          key={card.label}
+                          type="button"
+                          onClick={() => handlePlanCard(card, msg.id)}
+                          disabled={isLoading}
+                          className={`max-w-[88%] text-right px-3.5 py-2.5 rounded-2xl rounded-tr-xs text-xs font-semibold border transition-all active:scale-[0.98] cursor-pointer disabled:opacity-60 ${
+                            card.primary
+                              ? 'bg-[#EC7000] border-[#EC7000] text-white hover:bg-[#D45D00]'
+                              : 'bg-white border-[#FFD8B5] text-[#EC7000] hover:bg-[#FFF4EB]'
+                          }`}
+                        >
+                          {card.label}
+                        </button>
+                      ))}
+                    </div>
+                  )}
 
                   {/* Recipient Selection Cards for Pix Transfer */}
                   {msg.pixSelection && (
@@ -912,6 +1596,108 @@ Se quiser saber mais sobre algum desses pontos ou programar seu mês, é só me 
                         <ChevronRight className="w-4 h-4 text-slate-400 shrink-0" />
                       </button>
                     </div>
+                  )}
+
+                  {/* Outras formas de Pix (jornada do Studio): Copia e Cola ou QR Code na Área Pix */}
+                  {msg.pixSelection && onStartPixArea && (
+                    <div className="space-y-2">
+                      <span className="text-[11px] font-semibold text-slate-500 block">Outras formas de Pix:</span>
+                      <div className="grid grid-cols-2 gap-2">
+                        {([
+                          { mode: 'copia_cola', icon: FileCode2, title: 'Copia e Cola', sub: 'Cole o código' },
+                          { mode: 'qr_code', icon: QrCode, title: 'QR Code', sub: 'Escanear' },
+                        ] as const).map((o) => (
+                          <button
+                            key={o.mode}
+                            type="button"
+                            onClick={() => onStartPixArea(o.mode)}
+                            className="p-3 bg-white border border-slate-200/80 hover:border-[#EC7000] rounded-xl text-left transition-all shadow-2xs flex items-center gap-2.5 cursor-pointer"
+                          >
+                            <div className="w-8 h-8 rounded-lg bg-orange-50 text-[#EC7000] flex items-center justify-center shrink-0">
+                              <o.icon className="w-4 h-4" />
+                            </div>
+                            <div>
+                              <span className="text-xs font-bold text-slate-900 block leading-tight">{o.title}</span>
+                              <span className="text-[9px] text-slate-500">{o.sub}</span>
+                            </div>
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Resumo dos tetos por categoria + parametrização no simulador */}
+                  {msg.categoryCaps && (
+                    <div className="bg-[#FAFBFD] border border-slate-200/80 rounded-2xl p-3.5 space-y-2.5 shadow-2xs">
+                      <div className="flex justify-between items-center border-b border-slate-100 pb-2">
+                        <span className="text-xs font-bold text-[#002244] flex items-center gap-1.5">
+                          <SlidersHorizontal className="w-3.5 h-3.5 text-[#EC7000]" />
+                          Resumo dos Tetos Propostos
+                        </span>
+                        <span className="text-[10px] text-slate-500 font-mono">Renda {formatBRL(cliente.renda.mensal)}</span>
+                      </div>
+                      <div className="space-y-2">
+                        {msg.categoryCaps.map((c) => (
+                          <div key={c.category} className="flex justify-between items-center text-xs gap-2">
+                            <div className="flex items-start gap-2 min-w-0">
+                              <span className="w-2 h-2 rounded-full mt-1 shrink-0" style={{ backgroundColor: c.color }} />
+                              <div className="min-w-0">
+                                <span className="font-bold text-slate-800 block">{c.category}</span>
+                                <span className="text-[10px] text-slate-400">{c.description}</span>
+                              </div>
+                            </div>
+                            <div className="text-right shrink-0">
+                              <span className="font-bold font-mono text-slate-900 block">{formatBRL(c.amount)}</span>
+                              <span className="text-[10px] font-semibold text-[#EC7000] font-mono">{c.percentage.toFixed(1)}%</span>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                      {onNavigate && (
+                        <button
+                          type="button"
+                          onClick={() => onNavigate('wizard')}
+                          className="w-full py-2.5 bg-[#EC7000] hover:bg-[#D45D00] text-white rounded-xl font-bold text-xs flex items-center justify-center gap-1.5 shadow-sm transition-all active:scale-[0.98] cursor-pointer"
+                        >
+                          Parametrizar e Ajustar Valores
+                          <ChevronRight className="w-4 h-4" />
+                        </button>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Respostas sugeridas (jornada de criação de meta) */}
+                  {msg.chips && msg.id === messages[messages.length - 1]?.id && (
+                    <div className="flex flex-wrap gap-2">
+                      {msg.chips.map((chip) => (
+                        <button
+                          key={chip}
+                          type="button"
+                          onClick={() => handleSendMessage(chip)}
+                          className="px-3 py-1.5 rounded-full bg-white border border-[#FFD8B5] text-[11px] font-semibold text-[#EC7000] hover:bg-[#FFF4EB] transition-colors cursor-pointer"
+                        >
+                          {chip}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+
+                  {/* Botão de ação da resposta */}
+                  {msg.quickAction && (
+                    <button
+                      type="button"
+                      onClick={() => handleQuickAction(msg.quickAction!, msg.id)}
+                      className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-[#FFF4EB] border border-[#FFD8B5] text-[11px] font-bold text-[#EC7000] hover:bg-[#FFEBD9] transition-colors cursor-pointer"
+                    >
+                      {msg.quickAction.type === 'create_goal' ? (
+                        <Target className="w-3.5 h-3.5" />
+                      ) : msg.quickAction.type === 'view_home' ? (
+                        <House className="w-3.5 h-3.5" />
+                      ) : (
+                        <SlidersHorizontal className="w-3.5 h-3.5" />
+                      )}
+                      {msg.quickAction.label}
+                    </button>
                   )}
 
                   {/* Tela 2: card de revisão do Pix dentro da conversa */}
@@ -979,6 +1765,7 @@ Se quiser saber mais sobre algum desses pontos ou programar seu mês, é só me 
                   )}
 
                   {/* Feedback Action Buttons (Thumbs Up, Down, Copy) matching Video 1 */}
+                  {msg.text && !msg.subtle && (
                   <div className="flex items-center gap-3 pt-2 text-slate-400">
                     <button
                       type="button"
@@ -1009,6 +1796,7 @@ Se quiser saber mais sobre algum desses pontos ou programar seu mês, é só me 
                       <Copy className="w-3.5 h-3.5" />
                     </button>
                   </div>
+                  )}
                 </div>
               </div>
             )}

@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { useCliente } from '../cliente/ClienteContext';
 import {
   ChevronLeft,
   ChevronRight,
@@ -50,6 +51,8 @@ export interface PixComprovante {
   mensagem?: string;
   dataIso: string;
   idTransacao: string;
+  /** Nome de quem envia (cliente do app) */
+  pagador?: string;
 }
 
 export interface PixSaldos {
@@ -146,7 +149,7 @@ export const downloadComprovante = (c: PixComprovante) => {
     ['CPF', c.contato.documento],
     ['Instituição', `${c.contato.banco} (${c.contato.codigoBanco})`],
     [`Chave Pix (${c.contato.tipoChave})`, c.contato.chave],
-    ['De', 'Maria • Itaú Personnalité'],
+    ['De', `${c.pagador || 'Cliente'} • Itaú Personnalité`],
     ['Pago com', c.fonte.titulo],
     ['Tipo de transferência', 'Pix'],
   ];
@@ -182,18 +185,69 @@ export const downloadComprovante = (c: PixComprovante) => {
 
 // ================= Fluxo em tela cheia =================
 
-type Step = 'fonte' | 'revisao' | 'senha' | 'processando' | 'sucesso';
+type Step = 'fonte' | 'revisao' | 'alerta' | 'senha' | 'processando' | 'sucesso';
+
+/** Resultado de /api/pix/simular (simulação determinística do data_manager) */
+interface PixGuardResult {
+  fica_negativo: boolean;
+  saldo_minimo_depois?: number;
+  juros_adicionais?: number;
+  data_sugerida?: string;
+  data_sugerida_resolve?: boolean;
+  contas_comprometidas?: { descricao: string; valor: number; formatado?: { data?: string; valor?: string } }[];
+  formatado?: { dia_que_acaba_depois?: string | null; juros_adicionais?: string; data_sugerida?: string };
+}
 
 export interface PixFlowProps {
   amount: number;
   contato: PixContato;
   saldos: PixSaldos;
+  /** Opt-in "Pode me avisar": avisa antes de um Pix que aperta o mês, sem bloquear */
+  pixGuard?: boolean;
   onClose: () => void;
   onDone: (comprovante: PixComprovante, action: 'voltar' | 'nova') => void;
 }
 
-export const PixFlow: React.FC<PixFlowProps> = ({ amount: initialAmount, contato, saldos, onClose, onDone }) => {
+const logEvento = (name: string, detail = '') =>
+  fetch('/api/eventos', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ name, detail }),
+    keepalive: true,
+  }).catch(() => {});
+
+export const PixFlow: React.FC<PixFlowProps> = ({ amount: initialAmount, contato, saldos, pixGuard = false, onClose, onDone }) => {
+  const cliente = useCliente();
   const [step, setStep] = useState<Step>('fonte');
+  const [guard, setGuard] = useState<PixGuardResult | null>(null);
+  const [checkingGuard, setCheckingGuard] = useState(false);
+
+  // Antes da senha: se o alerta estiver ativo, simula o Pix na projeção do mês
+  const handleConfirmarRevisao = async () => {
+    if (!pixGuard || fonte?.id !== 'conta') {
+      setStep('senha');
+      return;
+    }
+    setCheckingGuard(true);
+    try {
+      const r: PixGuardResult = await fetch('/api/pix/simular', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ valor: amount }),
+      }).then((res) => res.json());
+      if (r.fica_negativo) {
+        setGuard(r);
+        setStep('alerta');
+        logEvento('pix_guard_warned', `valor=${amount}`);
+      } else {
+        setStep('senha');
+      }
+    } catch {
+      setStep('senha');
+    } finally {
+      setCheckingGuard(false);
+    }
+  };
   const [amount, setAmount] = useState(initialAmount);
   const [fonte, setFonte] = useState<PixFonte | null>(null);
   const [mensagem, setMensagem] = useState('');
@@ -278,6 +332,7 @@ export const PixFlow: React.FC<PixFlowProps> = ({ amount: initialAmount, contato
         mensagem: mensagem.trim() || undefined,
         dataIso: now.toISOString(),
         idTransacao: `E60701190${stamp}${rand}`,
+        pagador: cliente.nome,
       });
       setSenha('');
       setStep('sucesso');
@@ -499,8 +554,8 @@ export const PixFlow: React.FC<PixFlowProps> = ({ amount: initialAmount, contato
       <div className="px-5 pt-2 pb-5 shrink-0 bg-white">
         <button
           type="button"
-          disabled={!fonteCobreValor || editingValor}
-          onClick={() => setStep('senha')}
+          disabled={!fonteCobreValor || editingValor || checkingGuard}
+          onClick={handleConfirmarRevisao}
           className="w-full h-12 rounded-xl bg-[#EC7000] hover:bg-[#D66500] disabled:bg-slate-200 disabled:text-slate-400 disabled:cursor-not-allowed text-white text-sm font-bold flex items-center justify-between px-5 active:scale-[0.99] transition-all cursor-pointer"
         >
           <span>Confirmar transferência</span>
@@ -509,6 +564,71 @@ export const PixFlow: React.FC<PixFlowProps> = ({ amount: initialAmount, contato
       </div>
     </>
   );
+
+  // ================= Alerta da ia.i: Pix que aperta o mês (não bloqueia) =================
+  const renderAlerta = () =>
+    guard && (
+      <>
+        <Header onBack={() => setStep('revisao')} />
+        <div className="flex-1 min-h-0 overflow-y-auto px-5 pb-4">
+          <div className="w-11 h-11 rounded-2xl bg-[#FFF4EB] flex items-center justify-center mt-1">
+            <AlertTriangle className="w-5 h-5 text-[#EC7000]" />
+          </div>
+          <h1 className="text-lg font-bold text-slate-900 leading-tight mt-3">Esse Pix vai apertar o seu mês</h1>
+          <p className="text-xs text-slate-600 mt-2 leading-relaxed">
+            Com {formatBRL(amount)} saindo agora, sua conta fica negativa a partir de{' '}
+            <b>{guard.formatado?.dia_que_acaba_depois || 'antes do salário'}</b>
+            {guard.juros_adicionais ? (
+              <>
+                {' '}e os juros do limite aumentam cerca de <b>{guard.formatado?.juros_adicionais || formatBRL(guard.juros_adicionais)}</b>
+              </>
+            ) : null}
+            .
+          </p>
+          <div className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-[#EEF1FA] text-[#1A2B6D] text-[10px] font-bold mt-3">
+            Calculado a partir do seu extrato
+          </div>
+          {!!guard.contas_comprometidas?.length && (
+            <div className="mt-3 bg-slate-50 rounded-2xl border border-slate-100 p-3">
+              <p className="text-[11px] font-bold text-slate-700 mb-1.5">Contas que ficam sem saldo</p>
+              {guard.contas_comprometidas.map((c, i) => (
+                <div key={i} className="flex justify-between text-[11px] py-1 border-t border-slate-100 first:border-t-0">
+                  <span className="text-slate-600">
+                    {c.descricao} <span className="text-slate-400">· {c.formatado?.data}</span>
+                  </span>
+                  <b className="text-slate-800">{c.formatado?.valor || formatBRL(c.valor)}</b>
+                </div>
+              ))}
+            </div>
+          )}
+          {guard.formatado?.data_sugerida && (
+            <p className="text-[11px] text-slate-500 mt-3 leading-snug">
+              💡 Se der para esperar, o dia {guard.formatado.data_sugerida} (dia do salário) pesa menos no mês.
+            </p>
+          )}
+          <p className="text-[11px] text-slate-400 mt-3">Você decide: o Pix não é bloqueado.</p>
+        </div>
+        <div className="px-5 pt-2 pb-5 shrink-0 bg-white space-y-2">
+          <button
+            type="button"
+            onClick={() => {
+              logEvento('pix_guard_continued', `valor=${amount}`);
+              setStep('senha');
+            }}
+            className="w-full h-12 rounded-xl bg-[#EC7000] hover:bg-[#D66500] text-white text-sm font-bold active:scale-[0.99] transition-all cursor-pointer"
+          >
+            Continuar mesmo assim
+          </button>
+          <button
+            type="button"
+            onClick={() => setStep('revisao')}
+            className="w-full h-11 rounded-xl border border-slate-200 text-slate-700 text-sm font-bold hover:bg-slate-50 cursor-pointer"
+          >
+            Voltar e ajustar
+          </button>
+        </div>
+      </>
+    );
 
   // ================= Tela 5: senha de transação (simulada) =================
   const keypad: [string, string][] = [
@@ -702,6 +822,7 @@ export const PixFlow: React.FC<PixFlowProps> = ({ amount: initialAmount, contato
       )}
       {step === 'fonte' && renderFonte()}
       {step === 'revisao' && renderRevisao()}
+      {step === 'alerta' && renderAlerta()}
       {step === 'senha' && renderSenha()}
       {step === 'processando' && renderProcessando()}
       {step === 'sucesso' && renderSucesso()}

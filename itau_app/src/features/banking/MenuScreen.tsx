@@ -10,7 +10,9 @@ import {
   Sparkles,
   ListOrdered,
   ExternalLink,
+  SlidersHorizontal,
 } from 'lucide-react';
+import { useCliente } from '../cliente/ClienteContext';
 
 export interface MenuScreenProps {
   onNavigateToCartoes: () => void;
@@ -18,6 +20,8 @@ export interface MenuScreenProps {
   onNavigateToRegional: () => void;
   onNavigateToExtrato: () => void;
   onNavigateToIai: () => void;
+  /** Simulador de 4 passos (Raio-X, lazer, transporte, resumo) */
+  onNavigateToSimulador?: () => void;
   onOpenStorybook: () => void;
   className?: string;
 }
@@ -28,19 +32,21 @@ export const MenuScreen: React.FC<MenuScreenProps> = ({
   onNavigateToRegional,
   onNavigateToExtrato,
   onNavigateToIai,
+  onNavigateToSimulador,
   onOpenStorybook,
   className = '',
 }) => {
+  const cliente = useCliente();
   return (
     <div className={`bg-[#F4F6F8] min-h-full pb-20 select-none text-slate-800 ${className}`}>
       {/* Header Profile */}
       <div className="bg-white p-5 border-b border-slate-100">
         <div className="flex items-center gap-3.5">
           <div className="w-12 h-12 rounded-full bg-[#002244] text-white font-bold text-base flex items-center justify-center shadow-sm">
-            RA
+            {cliente.iniciais}
           </div>
           <div className="flex-1">
-            <h2 className="font-bold text-base text-slate-900 leading-tight">Roberto Alves</h2>
+            <h2 className="font-bold text-base text-slate-900 leading-tight">{cliente.nome}</h2>
             <p className="text-xs text-slate-400 mt-0.5">Agência 0340 • Conta 92104-1</p>
           </div>
         </div>
@@ -151,6 +157,27 @@ export const MenuScreen: React.FC<MenuScreenProps> = ({
             </div>
             <ChevronRight className="w-4 h-4 text-slate-300 group-hover:text-slate-600 transition-colors" />
           </button>
+
+          {onNavigateToSimulador && (
+            <button
+              type="button"
+              onClick={onNavigateToSimulador}
+              className="w-full flex items-center justify-between p-3.5 hover:bg-slate-50 transition-colors text-left group cursor-pointer"
+            >
+              <div className="flex items-center gap-3">
+                <div className="w-8 h-8 rounded-xl bg-orange-50 text-[#EC7000] flex items-center justify-center">
+                  <SlidersHorizontal className="w-4 h-4" />
+                </div>
+                <div>
+                  <span className="text-xs font-semibold text-slate-800 group-hover:text-[#EC7000] transition-colors block">
+                    Simulador de Controle de Gastos
+                  </span>
+                  <span className="text-[10px] text-slate-500">Programar contas fixas, lazer e transporte</span>
+                </div>
+              </div>
+              <ChevronRight className="w-4 h-4 text-slate-300 group-hover:text-slate-600 transition-colors" />
+            </button>
+          )}
 
           <button
             type="button"

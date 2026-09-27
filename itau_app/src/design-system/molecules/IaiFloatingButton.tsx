@@ -8,14 +8,18 @@ export interface IaiFloatingButtonProps {
   className?: string;
   /** Whether the button starts expanded */
   defaultExpanded?: boolean;
+  /** Texto exibido enquanto expandido */
+  label?: string;
+  /** Pulsa discretamente depois de recolher, para chamar atenção sem interromper */
+  pulse?: boolean;
 }
-
-type ButtonState = 'vamos-conversar' | 'salario-programar' | 'compact-icon';
 
 export const IaiFloatingButton: React.FC<IaiFloatingButtonProps> = ({
   onClick,
   className = '',
   defaultExpanded = true,
+  label = 'Salário na conta, vamos programar o mês?',
+  pulse = false,
 }) => {
   const [isCompressed, setIsCompressed] = useState(!defaultExpanded);
 
@@ -41,9 +45,12 @@ export const IaiFloatingButton: React.FC<IaiFloatingButtonProps> = ({
       <button
         onClick={handleInteraction}
         type="button"
-        aria-label="Abrir assistente Ia.i: Salário no conta, vamos programar o mês?"
+        aria-label={`Abrir assistente Ia.i: ${label}`}
         className={`relative flex items-center h-12 px-[13px] rounded-full bg-white border border-slate-200/90 shadow-[0_6px_22px_rgba(0,0,0,0.12)] hover:shadow-[0_8px_26px_rgba(0,71,186,0.2)] active:scale-95 transition-[box-shadow,transform] duration-300 ease-out cursor-pointer`}
       >
+        {pulse && isCompressed && (
+          <span className="absolute inset-0 rounded-full border-2 border-[#EC7000]/40 animate-ping pointer-events-none" aria-hidden="true" />
+        )}
         {/* Orange Sparkle Icon - fixed solid without flickering/pulsing */}
         <div className="flex items-center justify-center shrink-0">
           <Sparkles className="w-5 h-5 text-[#EC7000] fill-[#EC7000]" />
@@ -56,9 +63,7 @@ export const IaiFloatingButton: React.FC<IaiFloatingButtonProps> = ({
             isCompressed ? 'max-w-0 opacity-0 ml-0' : 'max-w-[280px] opacity-100 ml-3'
           }`}
         >
-          <span className="text-xs font-semibold text-slate-800 tracking-tight pr-1">
-            Salário no conta, vamos programar o mês?
-          </span>
+          <span className="text-xs font-semibold text-slate-800 tracking-tight pr-1">{label}</span>
         </div>
 
         {/* Blue "beta" Badge centralized at the bottom for both expanded and compact states */}

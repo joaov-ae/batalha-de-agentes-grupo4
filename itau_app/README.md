@@ -25,6 +25,48 @@ Cloud Run itau-app  (server.ts, Express; SA squad-agent-sa)
 - **Voz** (`src/features/banking/useVoiceInput.ts`): grava com MediaRecorder, converte para WAV 16 kHz e
   envia para `/api/transcribe`. Reserva: Web Speech API do navegador.
 
+### Jornadas trazidas do protótipo do Vertex AI Studio (`src/features/studio/`)
+
+- **Home** (`HubScreen`): saldo R$ 17.829,50 / limite R$ 28.000, card "R$ 10.000,00 a mais na conta!",
+  metas com progresso "alcançado vs meta", pontos Itaú Shop e "+ Nova Missão".
+- **Landing da ia.i** (`IaiLandingScreen`): termos + "Ativar e Analisar Tetos" → chat com resumo de tetos
+  por categoria; "Agora não" → chat normal.
+- **Metas e gamificação** (`MetaDetailScreen`): sugestões de investimento, aporte (debita a conta, entra no
+  extrato) e pontos Itaú Shop (1,5 ponto por real).
+- **Área Pix** (`PixModal`): Pix Copia e Cola / QR Code com alerta "vai comprometer sua renda mensal".
+- **Simulador** (`WizardScreen`): Raio-X das fixas → lazer sem culpa → teto de transporte → resumo.
+- No chat: criação de meta conversando, resumo de tetos, botões de ação e "Outras formas de Pix".
+- Extrato: "Analisar com a ia.i" no detalhe do lançamento. Cartões: cartão virtual e bloqueio temporário.
+
+Saldo, metas, pontos e lançamentos novos ficam no estado do `App.tsx` (compartilhados entre as telas, só na
+sessão). O saldo vem de `/api/pix/saldo` (saldo_hoje do `data_manager`).
+
+### Plano do mês no dia do salário (protótipo `prototipo-iai`)
+
+Botão flutuante "Seu salário caiu. Bora ver o mês?" → jornada no chat (`src/features/banking/PlanoSalario.tsx`):
+saídas até o salário → projeção negativa (gráfico da série diária) → corte de streaming → "Tem outro jeito?" →
+reagendar Pix vs. limite da conta → proposta com este mês e próximo mês → biometria → projeção recalculada e
+limite semanal → avisar quem recebe → opt-in "Pode me avisar" → avaliação (joinha + motivo).
+
+- **Cliente da demo**: "Renata Lopes" (nome fictício) = `5865ce27-0681-4dcc-9475-3df9d15a6858`, estado
+  `zero_a_zero` no `data_manager`. Perfil servido por `GET /api/cliente` e lido no front por `ClienteContext`
+  (ver `_agent_context/itau_app/` para o critério de escolha e as métricas do segmento).
+- **Números por regra, nunca pelo LLM**: o servidor chama o `data-manager-itau` (privado) com token de identidade
+  da SA (`roles/run.invoker`): `/status`, `/compromissos`, `/projecao`, `/ajustes`, `/recorrencias`,
+  `POST /simulacoes/transacao`, `POST /acoes/agendar-pix` (simulada) e `POST /memoria/decisoes`.
+  Sem acesso (ex.: local), usa `data/plano-salario-snapshot.json`.
+- **Próximo mês** (regra local): sobra após reagendar + entradas recorrentes − saídas recorrentes − gasto do dia a dia.
+- **Alerta antes do Pix** (após o opt-in): simula o Pix na projeção e avisa se deixa o mês negativo, sem bloquear.
+- **Eventos** (`POST /api/eventos`): log estruturado no Cloud Logging, com os mesmos nomes do protótipo.
+
+| Endpoint | Uso |
+|---|---|
+| `GET /api/plano-salario` | todos os números da jornada |
+| `POST /api/plano-salario/decisao` | ajuste aceito/recusado (memória do agente) |
+| `POST /api/plano-salario/reagendar` | reagendamento após a biometria |
+| `POST /api/pix/simular` | alerta antes do Pix |
+| `POST /api/eventos` | eventos da jornada |
+
 ## Dados
 
 - Cliente demo "Maria" = `id_usuario 139aae21-0535-4a19-bbf2-d2b8f0c7a0d8` (saldo final R$ 1.744,32).

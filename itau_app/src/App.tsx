@@ -3,18 +3,26 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
+import { useCliente } from './features/cliente/ClienteContext';
 import { Wifi, Battery, Signal } from 'lucide-react';
 import { CartoesScreen } from './features/banking/CartoesScreen';
-import { ControleGastosHub } from './features/banking/ControleGastosHub';
 import { ControleGastosWizard } from './features/banking/ControleGastosWizard';
 import { TarjetasRegionalScreen } from './features/banking/TarjetasRegionalScreen';
 import { MenuScreen } from './features/banking/MenuScreen';
-import { ExtratoScreen } from './features/banking/ExtratoScreen';
+import { ExtratoScreen, ExtraTransaction } from './features/banking/ExtratoScreen';
 import { IaiChatScreen } from './features/banking/IaiChatScreen';
+import { PixComprovante, PixSaldos } from './features/banking/PixFlow';
 import { BottomTabBar, TabId } from './design-system/organisms/BottomTabBar';
 import { StandaloneStorybook } from './features/storybook/StandaloneStorybook';
-import { FinancialGoal, INITIAL_GOALS } from './features/banking/goalsStore';
+// Telas e jornadas vindas do protótipo do Vertex AI Studio (Build)
+import { HubScreen } from './features/studio/HubScreen';
+import { IaiLandingScreen } from './features/studio/IaiLandingScreen';
+import { MetaDetailScreen } from './features/studio/MetaDetailScreen';
+import { PixModal } from './features/studio/PixModal';
+import { WizardScreen as SimuladorScreen } from './features/studio/WizardScreen';
+import { FinancialGoal, PixTransferParams, ScreenType as StudioScreen } from './features/studio/studioTypes';
+import { MARIA_PERSONA, INITIAL_GOALS } from './features/studio/studioConstants';
 
 export type MobileScreen =
   | 'cartoes'
@@ -24,13 +32,62 @@ export type MobileScreen =
   | 'menu'
   | 'storybook'
   | 'extrato'
-  | 'iai';
+  | 'iai'
+  | 'iai_landing'
+  | 'meta_detail'
+  | 'pix_area'
+  | 'simulador';
+
+// Telas em tela cheia (sem a barra de abas)
+const FULL_SCREENS: MobileScreen[] = ['wizard', 'iai', 'iai_landing', 'meta_detail', 'simulador'];
+
+// Saldo/limite da conta (vêm de /api/pix/saldo) e limites dos cartões usados no Pix
+const INITIAL_SALDOS: PixSaldos = { conta: 3776.24, limiteConta: 28000, infinite: 24572.2, black: 13220.98 };
 
 export default function App() {
+  const cliente = useCliente();
+  // Persona das telas do Studio montada com o perfil real da cliente (nome fictício)
+  const persona = useMemo(
+    () => ({
+      ...MARIA_PERSONA,
+      name: cliente.nome,
+      initials: cliente.iniciais,
+      monthlyIncome: cliente.renda.mensal,
+      fixedCosts: cliente.fixas.total,
+      currentInvoice: cliente.faturaCartao,
+    }),
+    [cliente],
+  );
   const [currentScreen, setCurrentScreen] = useState<MobileScreen>('hub');
   const [activeTab, setActiveTab] = useState<TabId>('inicio');
-  const [hasActiveControl, setHasActiveControl] = useState(false);
   const [goals, setGoals] = useState<FinancialGoal[]>(INITIAL_GOALS);
+  const [selectedGoal, setSelectedGoal] = useState<FinancialGoal | null>(null);
+  // Gamificação: pontos Itaú Shop da cliente
+  const [itauShopPoints, setItauShopPoints] = useState(3200);
+  // Saldos compartilhados por Home, Extrato e Pix; descontados a cada Pix e aporte
+  const [saldos, setSaldos] = useState<PixSaldos>(INITIAL_SALDOS);
+  const [extraTransactions, setExtraTransactions] = useState<ExtraTransaction[]>([]);
+  // Cada abertura do chat é uma conversa nova (key), com pergunta inicial ou jornadas opcionais
+  const [chatSession, setChatSession] = useState<{
+    key: number;
+    initialPrompt?: string;
+    goalFlow?: boolean;
+    salaryPlan?: boolean;
+  }>({ key: 0 });
+  // Opt-in "Pode me avisar": a ia.i avisa antes de um Pix que aperta o mês
+  const [pixGuard, setPixGuard] = useState(false);
+  const [pixParams, setPixParams] = useState<PixTransferParams | undefined>(undefined);
+
+  useEffect(() => {
+    fetch('/api/pix/saldo')
+      .then((r) => r.json())
+      .then((d) => {
+        if (Number.isFinite(Number(d.saldo))) {
+          setSaldos((prev) => ({ ...prev, conta: Number(d.saldo), limiteConta: Number(d.limiteConta) }));
+        }
+      })
+      .catch(() => {});
+  }, []);
 
   // Check if current route is standalone Storybook
   const [isStorybookMode, setIsStorybookMode] = useState<boolean>(() => {
@@ -93,17 +150,85 @@ export default function App() {
     if (tab === 'pra-voce') setCurrentScreen('cartoes');
     if (tab === 'produtos') setCurrentScreen('cartoes');
     if (tab === 'menu') setCurrentScreen('menu');
-    if (tab === 'pix') setCurrentScreen('hub');
+    if (tab === 'pix') {
+      setPixParams(undefined);
+      setCurrentScreen('pix_area');
+    }
+  };
+
+  const goTo = (screen: MobileScreen, tab?: TabId) => {
+    if (tab) setActiveTab(tab);
+    setCurrentScreen(screen);
+  };
+
+  const openStorybook = () => {
+    try {
+      const newWin = window.open('/storybook', '_blank');
+      if (!newWin || newWin.closed || typeof newWin.closed === 'undefined') {
+        window.history.pushState({}, '', '/storybook');
+        setIsStorybookMode(true);
+      }
+    } catch {
+      window.history.pushState({}, '', '/storybook');
+      setIsStorybookMode(true);
+    }
+  };
+
+  // Abre o chat da ia.i (sempre uma conversa nova)
+  const openChat = (opts: { initialPrompt?: string; goalFlow?: boolean; salaryPlan?: boolean } = {}) => {
+    setChatSession((prev) => ({ key: prev.key + 1, ...opts }));
+    setCurrentScreen('iai');
+  };
+
+  // Navegação usada pelas telas do Studio
+  const studioNavigate = (screen: StudioScreen) => {
+    switch (screen) {
+      case 'hub': return goTo('hub', 'inicio');
+      case 'cartoes': return goTo('cartoes', 'produtos');
+      case 'extrato': return goTo('extrato', 'extrato');
+      case 'menu': return goTo('menu', 'menu');
+      case 'pix': setPixParams(undefined); return goTo('pix_area');
+      case 'iai': return openChat();
+      case 'iai_landing': return goTo('iai_landing');
+      case 'wizard': return goTo('simulador');
+      case 'meta_detail': return goTo('meta_detail');
+      case 'storybook': return openStorybook();
+    }
   };
 
   const handleGoalCreated = (newGoal: FinancialGoal) => {
     setGoals((prev) => {
       const exists = prev.some((g) => g.title.toLowerCase() === newGoal.title.toLowerCase());
       if (exists) {
-        return prev.map((g) => (g.title.toLowerCase() === newGoal.title.toLowerCase() ? newGoal : g));
+        return prev.map((g) => (g.title.toLowerCase() === newGoal.title.toLowerCase() ? { ...newGoal, currentAmount: g.currentAmount } : g));
       }
       return [newGoal, ...prev];
     });
+    setItauShopPoints((p) => p + (newGoal.itauShopPointsBonus || 500));
+  };
+
+  // Aporte em meta: soma na meta, gera pontos, debita a conta e aparece no extrato
+  const handleMakeAporte = (goalId: string, amount: number, earnedPoints: number) => {
+    const goal = goals.find((g) => g.id === goalId);
+    setGoals((prev) => prev.map((g) => (g.id === goalId ? { ...g, currentAmount: g.currentAmount + amount } : g)));
+    setSelectedGoal((g) => (g && g.id === goalId ? { ...g, currentAmount: g.currentAmount + amount } : g));
+    setItauShopPoints((p) => p + earnedPoints);
+    setSaldos((s) => ({ ...s, conta: s.conta - amount }));
+    setExtraTransactions((prev) => [
+      {
+        id: `aporte-${Date.now()}`,
+        title: `Aporte Meta: ${goal?.title || 'Investimento'}`,
+        subtitle: 'Conta Corrente Personnalité • Débito imediato',
+        amount,
+        type: 'expense',
+      },
+      ...prev,
+    ]);
+  };
+
+  // Pix concluído no chat: desconta da conta ou do limite do cartão usado
+  const handlePixDone = (c: PixComprovante) => {
+    setSaldos((s) => ({ ...s, [c.fonte.id]: s[c.fonte.id] - c.amount }));
   };
 
   return (
@@ -137,6 +262,7 @@ export default function App() {
                 setCurrentScreen('hub');
               }}
               onOpenControleGastos={() => setCurrentScreen('wizard')}
+              onOpenSimulador={() => setCurrentScreen('simulador')}
               onNavigateToExtrato={() => {
                 setActiveTab('extrato');
                 setCurrentScreen('extrato');
@@ -145,50 +271,84 @@ export default function App() {
           )}
 
           {currentScreen === 'hub' && (
-            <ControleGastosHub
-              onStartControle={() => setCurrentScreen('wizard')}
-              onNavigateToCartoes={() => {
-                setActiveTab('produtos');
-                setCurrentScreen('cartoes');
+            <HubScreen
+              persona={persona}
+              goals={goals}
+              itauShopPoints={itauShopPoints}
+              saldo={saldos.conta}
+              limiteConta={saldos.limiteConta}
+              onNavigate={studioNavigate}
+              onOpenQuickPrompt={(prompt) => openChat({ initialPrompt: prompt })}
+              onOpenNewGoalFlow={() => openChat({ goalFlow: true })}
+              onOpenSalaryPlan={() => openChat({ salaryPlan: true })}
+              onSelectGoal={(goal) => {
+                setSelectedGoal(goal);
+                setCurrentScreen('meta_detail');
               }}
-              onNavigateToExtrato={() => {
-                setActiveTab('extrato');
-                setCurrentScreen('extrato');
-              }}
-              onNavigateToIai={() => setCurrentScreen('iai')}
-              hasActiveControl={hasActiveControl}
-              activeGoals={goals}
             />
+          )}
+
+          {currentScreen === 'iai_landing' && (
+            <IaiLandingScreen
+              onNavigate={studioNavigate}
+              onActivateWithCategoryCaps={() =>
+                openChat({ initialPrompt: 'Programe a divisão do salário entre gastos essenciais e não essenciais.' })
+              }
+              onGoToRegularChat={() => openChat()}
+            />
+          )}
+
+          {currentScreen === 'meta_detail' && (
+            <MetaDetailScreen
+              goal={selectedGoal || goals[0]}
+              itauShopPoints={itauShopPoints}
+              onNavigate={studioNavigate}
+              onMakeAporte={handleMakeAporte}
+            />
+          )}
+
+          {currentScreen === 'pix_area' && (
+            <PixModal key={pixParams?.mode || 'contato'} onNavigate={studioNavigate} pixParams={pixParams} />
+          )}
+
+          {currentScreen === 'simulador' && (
+            <SimuladorScreen persona={persona} onNavigate={studioNavigate} onGoalCreated={handleGoalCreated} />
           )}
 
           {currentScreen === 'extrato' && (
             <ExtratoScreen
-              onBack={() => {
-                setActiveTab('inicio');
-                setCurrentScreen('hub');
-              }}
+              onBack={() => goTo('hub', 'inicio')}
+              saldo={saldos.conta}
+              limiteConta={saldos.limiteConta}
+              extraTransactions={extraTransactions}
+              onAskIai={(title) =>
+                openChat({ initialPrompt: `Qual o impacto do gasto em "${title}" no meu limite de lazer sem culpa?` })
+              }
             />
           )}
 
           {currentScreen === 'iai' && (
             <IaiChatScreen
-              onBack={() => {
-                setActiveTab('inicio');
-                setCurrentScreen('hub');
-              }}
+              key={chatSession.key}
+              onBack={() => goTo('hub', 'inicio')}
+              onNavigate={studioNavigate}
               onGoalCreated={handleGoalCreated}
-              activeGoals={goals}
+              onStartPixArea={(mode) => {
+                setPixParams({ mode });
+                setCurrentScreen('pix_area');
+              }}
+              saldos={saldos}
+              onPixDone={handlePixDone}
+              initialPrompt={chatSession.initialPrompt}
+              isGoalCreationFlow={chatSession.goalFlow}
+              salaryPlanMode={chatSession.salaryPlan}
+              pixGuard={pixGuard}
+              onPixGuardOptIn={() => setPixGuard(true)}
             />
           )}
 
           {currentScreen === 'wizard' && (
-            <ControleGastosWizard
-              onClose={() => {
-                setHasActiveControl(true);
-                setCurrentScreen('hub');
-                setActiveTab('inicio');
-              }}
-            />
+            <ControleGastosWizard onClose={() => goTo('hub', 'inicio')} />
           )}
 
           {currentScreen === 'regional' && (
@@ -212,26 +372,15 @@ export default function App() {
                 setActiveTab('extrato');
                 setCurrentScreen('extrato');
               }}
-              onNavigateToIai={() => setCurrentScreen('iai')}
-              onOpenStorybook={() => {
-                try {
-                  const newWin = window.open('/storybook', '_blank');
-                  if (!newWin || newWin.closed || typeof newWin.closed === 'undefined') {
-                    window.history.pushState({}, '', '/storybook');
-                    setIsStorybookMode(true);
-                  }
-                } catch {
-                  window.history.pushState({}, '', '/storybook');
-                  setIsStorybookMode(true);
-                }
-              }}
+              onNavigateToIai={() => openChat()}
+              onNavigateToSimulador={() => goTo('simulador')}
+              onOpenStorybook={openStorybook}
             />
           )}
         </main>
 
         {/* Bottom Tab Bar (shown on standard mobile screens) */}
-        {currentScreen !== 'wizard' &&
-          currentScreen !== 'iai' && (
+        {!FULL_SCREENS.includes(currentScreen) && (
             <div className="sticky bottom-0 z-30 shrink-0">
               <BottomTabBar
                 activeTab={activeTab}
