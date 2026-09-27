@@ -167,6 +167,30 @@ def data_debito(f: Features, data: date, canal: str) -> date:
     return next((d for d in datas if d > fim_mes), data)
 
 
+def datas_debito(f: Features, data: date, canal: str, parcelas: int = 1) -> list[date]:
+    """Calcula as datas de débito para 1 ou N parcelas no cartão ou à vista."""
+    primeira = data_debito(f, data, canal)
+    if parcelas <= 1 or canal != "cartao":
+        return [primeira]
+
+    fatura = next((i for i in f.itens if i.tipo_item == "fatura"), None)
+    if fatura is None:
+        return [primeira + timedelta(days=30 * i) for i in range(parcelas)]
+
+    ate = primeira + timedelta(days=35 * (parcelas + 2))
+    todas = ocorrencias(fatura, f.data_referencia, ate)
+    futuras = [d for d in todas if d >= primeira]
+
+    resultado = []
+    for i in range(parcelas):
+        if i < len(futuras):
+            resultado.append(futuras[i])
+        else:
+            base_calc = resultado[-1] if resultado else primeira
+            resultado.append(base_calc + timedelta(days=30))
+    return resultado
+
+
 def ciclo_seguinte(f: Features) -> tuple[date | None, date]:
     """(dia do próximo salário, véspera do salário seguinte)."""
     renda = f.renda_principal
@@ -179,21 +203,57 @@ def ciclo_seguinte(f: Features) -> tuple[date | None, date]:
     return salario, seguinte - timedelta(days=1)
 
 
-def simular_transacao(f: Features, store: BigQueryStatusStore, valor: float, data: date | None, canal: str, descricao: str) -> dict[str, Any]:
+def simular_transacao(
+    f: Features,
+    store: BigQueryStatusStore,
+    valor: float,
+    data: date | None,
+    canal: str,
+    descricao: str,
+    parcelas: int = 1,
+) -> dict[str, Any]:
     base = projetar_cliente(f)
-    debito = data_debito(f, data or f.data_referencia + timedelta(days=1), canal)
-    nova_tx = Evento(debito, -round(valor, 2), "simulacao", descricao, "simulacao")
-    nova = projetar_cliente(f, ate=base.fim, eventos=eventos_previstos(f, base.fim) + [nova_tx])
+    dt_base = data or (f.data_referencia + timedelta(days=1))
+    debito_datas = datas_debito(f, dt_base, canal, parcelas)
+    debito_primeira = debito_datas[0]
+    valor_parcela = round(valor / parcelas, 2)
+
+    novos_eventos = []
+    for idx, d_parc in enumerate(debito_datas):
+        desc = f"{descricao} ({idx+1}/{parcelas})" if parcelas > 1 else descricao
+        novos_eventos.append(Evento(d_parc, -valor_parcela, "simulacao", desc, "simulacao"))
+
+    nova = projetar_cliente(f, ate=base.fim, eventos=eventos_previstos(f, base.fim) + novos_eventos)
 
     salario, fim_ciclo2 = ciclo_seguinte(f)
     sugerida_resolve = False
     if salario is not None:
-        adiada = Evento(salario, -round(valor, 2), "simulacao", descricao, "simulacao")
-        dois_ciclos = projetar_cliente(f, ate=fim_ciclo2, eventos=eventos_previstos(f, fim_ciclo2) + [adiada])
+        adiada_datas = datas_debito(f, salario, canal, parcelas) if canal == "cartao" else [salario]
+        adiadas = [
+            Evento(d, -valor_parcela, "simulacao", f"{descricao} ({i+1}/{parcelas})" if parcelas > 1 else descricao, "simulacao")
+            for i, d in enumerate(adiada_datas)
+        ]
+        dois_ciclos = projetar_cliente(f, ate=fim_ciclo2, eventos=eventos_previstos(f, fim_ciclo2) + adiadas)
         sugerida_resolve = dois_ciclos.dia_que_acaba is None
 
     juros_antes = juros_estimados(base, store.taxa_juros_dia)
     juros_depois = juros_estimados(nova, store.taxa_juros_dia)
+
+    contas_comprometidas = []
+    if nova.dia_que_acaba is not None:
+        for e in eventos_previstos(f, base.fim):
+            if e.valor < 0 and e.tipo_item != "simulacao" and e.data >= nova.dia_que_acaba:
+                contas_comprometidas.append({
+                    "data": e.data,
+                    "descricao": e.descricao,
+                    "valor": round(abs(e.valor), 2),
+                    "tipo_item": e.tipo_item,
+                    "formatado": {
+                        "data": fmt.dia(e.data),
+                        "valor": fmt.brl(abs(e.valor)),
+                    },
+                })
+
     return {
         "id_usuario": f.id_usuario,
         "fica_negativo": nova.dia_que_acaba is not None,
@@ -203,14 +263,78 @@ def simular_transacao(f: Features, store: BigQueryStatusStore, valor: float, dat
         "juros_estimados_antes": juros_antes,
         "juros_estimados_depois": juros_depois,
         "juros_adicionais": round(juros_depois - juros_antes, 2),
-        "data_debito_na_conta": debito,
+        "data_debito_na_conta": debito_primeira,
         "data_sugerida": salario,
         "data_sugerida_resolve": sugerida_resolve,
+        "parcelas": parcelas,
+        "valor_parcela": valor_parcela if parcelas > 1 else None,
+        "contas_comprometidas": contas_comprometidas,
         "formatado": {
             "valor": fmt.brl(valor),
+            "valor_parcela": fmt.brl(valor_parcela) if parcelas > 1 else None,
             "dia_que_acaba_depois": fmt.dia(nova.dia_que_acaba),
             "juros_adicionais": fmt.brl(round(juros_depois - juros_antes, 2)),
             "data_sugerida": fmt.dia(salario),
+        },
+    }
+
+
+def produtos_investimento(f: Features) -> dict[str, Any]:
+    """Retorna opções de investimento de liquidez diária adequadas para reserva ou clientes fecha_bem."""
+    proj = projetar_cliente(f)
+    sobra = max(0.0, proj.saldo_minimo)
+    sugerida = round(sobra, 2) if sobra > 0 else max(round(f.saldo_hoje * 0.2, 2), 100.0)
+    rend_mes = round(sugerida * 0.0085, 2)
+
+    produtos = [
+        {
+            "nome": "CDB Itaú DI",
+            "tipo": "Renda Fixa Privada",
+            "rentabilidade": "100% do CDI",
+            "liquidez": "Diária com resgate imediato",
+            "risco": "Muito baixo",
+            "resgate_imediato": True,
+            "descricao": "Proteção do FGC até R$ 250 mil. Excelente para reserva de emergência e alta liquidez.",
+            "rendimento_estimado_mes": rend_mes,
+            "formatado": {
+                "rendimento_estimado_mes": fmt.brl(rend_mes),
+            },
+        },
+        {
+            "nome": "Tesouro Selic 2029",
+            "tipo": "Título Público Federal",
+            "rentabilidade": "100% Taxa Selic",
+            "liquidez": "D+1 (dias úteis)",
+            "risco": "Mínimo (garantia soberana)",
+            "resgate_imediato": False,
+            "descricao": "Títulos do Tesouro Direto pós-fixados, investimento com máxima segurança.",
+            "rendimento_estimado_mes": rend_mes,
+            "formatado": {
+                "rendimento_estimado_mes": fmt.brl(rend_mes),
+            },
+        },
+        {
+            "nome": "Fundo Itaú Soberano DI Simples",
+            "tipo": "Fundo DI Renda Fixa",
+            "rentabilidade": "~100% do CDI",
+            "liquidez": "Diária (D+0)",
+            "risco": "Muito baixo",
+            "resgate_imediato": True,
+            "descricao": "Sem taxa de administração, alocado integralmente em títulos públicos.",
+            "rendimento_estimado_mes": rend_mes,
+            "formatado": {
+                "rendimento_estimado_mes": fmt.brl(rend_mes),
+            },
+        },
+    ]
+    return {
+        "id_usuario": f.id_usuario,
+        "saldo_hoje": f.saldo_hoje,
+        "valor_sugerido_reserva": sugerida,
+        "produtos": produtos,
+        "formatado": {
+            "saldo_hoje": fmt.brl(f.saldo_hoje),
+            "valor_sugerido_reserva": fmt.brl(sugerida),
         },
     }
 

@@ -7,7 +7,8 @@ from fastapi import APIRouter
 from app import formatar as fmt
 from app import servicos
 from app.deps import ClienteDep, MemoriaDep, StatusStoreDep
-from app.schemas import ProjecaoResposta, ResumoRecebimentoResposta, StatusResposta
+from app.schemas import OpcoesInvestimentoResposta, ProjecaoResposta, ResumoRecebimentoResposta, StatusResposta
+
 
 router = APIRouter(prefix="/v1/clientes/{id_usuario}", tags=["cliente"])
 
@@ -135,4 +136,17 @@ def listar_parcelas(f: ClienteDep) -> dict[str, Any]:
             }
         )
     return {"id_usuario": f.id_usuario, "total_mensal": round(sum(a["valor_mensal"] for a in ativos), 2), "parcelas": ativos}
+ 
+ 
+@router.get(
+    "/investimentos",
+    operation_id="obter_opcoes_investimento",
+    response_model=OpcoesInvestimentoResposta,
+    summary="Opções de investimento de liquidez diária recomendadas para reserva (cenário fecha_bem)",
+    description="Traz opções de liquidez diária (CDB 100% CDI, Tesouro Selic, Fundo DI) com projeção mensal de rendimento.",
+)
+def obter_investimentos(f: ClienteDep) -> dict[str, Any]:
+    return servicos.produtos_investimento(f)
+
+
 
