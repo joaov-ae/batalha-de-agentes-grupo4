@@ -59,6 +59,14 @@ export interface PlanoSalarioData {
   ajusteGasto: { ajusteId: string; categoria: string; tetoSugerido: number; gastoMesAtual: number; mediaMensal: number } | null;
   /** Projeção positiva, mas abaixo de 10% da renda (estado zero_a_zero) */
   semMargem: boolean;
+  semana: {
+    diasAteSalario: number;
+    semanas: number;
+    gastoDeCostumeSemana: number;
+    sobraAteSalario: number;
+    limiteSemanalHoje: number;
+    limiteSemanalComAjuste: number;
+  };
   proximoMes: { entradas: number; saidasFixas: number; gastoDiaADia: number };
 }
 
@@ -181,6 +189,37 @@ export const SaidasBox: React.FC<{ plano: PlanoSalarioData }> = ({ plano }) => (
     </div>
   </Box>
 );
+
+/** "Quanto posso gastar por semana?": como o valor semanal é calculado */
+export const SemanaBox: React.FC<{ plano: PlanoSalarioData }> = ({ plano }) => {
+  const s = plano.semana;
+  const linhas: [string, string][] = [
+    ['Saldo hoje', brl(plano.cliente.saldoHoje)],
+    [`Contas até ${plano.cliente.proximoSalario.formatado}`, `− ${brl(plano.totalSaidas)}`],
+    ['Gasto de costume por semana', brl(s.gastoDeCostumeSemana)],
+    ['Sobra prevista até o salário', signed(s.sobraAteSalario)],
+  ];
+  return (
+    <Box>
+      <CalcBadge />
+      <div className="text-center py-1">
+        <span className="text-[11px] text-slate-500">Pra gastar por semana</span>
+        <p className="text-2xl font-extrabold text-[#EC7000] tabular-nums">{brl(s.limiteSemanalHoje)}</p>
+        <span className="text-[10px] text-slate-400">
+          {s.diasAteSalario} dias até o salário (~{s.semanas.toLocaleString('pt-BR')} semanas)
+        </span>
+      </div>
+      <div className="mt-2 divide-y divide-slate-100">
+        {linhas.map(([label, valor]) => (
+          <div key={label} className="flex justify-between py-1.5 text-xs">
+            <span className="text-slate-600">{label}</span>
+            <b className="tabular-nums text-slate-900">{valor}</b>
+          </div>
+        ))}
+      </div>
+    </Box>
+  );
+};
 
 export const ChartBox: React.FC<{ plano: PlanoSalarioData; tipo: 'neg' | 'pos' }> = ({ plano, tipo }) => (
   <Box>

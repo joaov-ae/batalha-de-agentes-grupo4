@@ -36,6 +36,7 @@ import {
 import {
   PlanoSalarioData,
   SaidasBox,
+  SemanaBox,
   ChartBox,
   AlternativasBox,
   PropostaBox,
@@ -74,14 +75,21 @@ export interface IaiChatScreenProps {
   skipIntro?: boolean;
 }
 
-// Jornada "plano do mês no dia do salário": ações dos cards (undefined = caminho fora da demo)
-type PlanAction = 'saidas' | 'alternativas' | 'proposta' | 'biometria' | 'avisar' | 'nao_precisa' | 'optin';
+// Jornada "plano do mês no dia do salário": cards só na saudação; depois, conversa livre
 interface PlanCard {
   label: string;
   primary?: boolean;
-  action?: PlanAction;
+  action: 'semana' | 'saidas' | 'aviso';
 }
-type PlanBlock = 'saidas' | 'grafico-neg' | 'grafico-pos' | 'alternativas' | 'proposta' | 'avaliacao';
+type PlanBlock = 'saidas' | 'grafico-neg' | 'grafico-pos' | 'alternativas' | 'proposta' | 'avaliacao' | 'semana';
+// Etapa que espera uma resposta da cliente (null = conversa normal)
+type PlanStage = null | 'depois_semana' | 'depois_aviso' | 'corte' | 'alternativa' | 'confirmacao' | 'avisar' | 'optin';
+interface PlanOption {
+  id: string;
+  descricao: string;
+  /** Reserva quando o Gemini não está disponível */
+  palavras: string[];
+}
 
 type QuickAction =
   | { type: 'view_wizard'; label: string }
@@ -386,9 +394,9 @@ export const IaiChatScreen: React.FC<IaiChatScreenProps> = ({
         text: 'Quer ver quanto dá pra gastar por semana e fechar o mês no verde?',
         timestamp: nowTime(),
         planCards: [
-          { label: 'Quanto posso gastar por semana com tranquilidade?' },
+          { label: 'Quanto posso gastar por semana com tranquilidade?', action: 'semana' },
           { label: 'O que ainda vai sair da minha conta este mês?', action: 'saidas' },
-          { label: 'Me avisa antes de um gasto apertar meu mês?' },
+          { label: 'Me avisa antes de um gasto apertar meu mês?', action: 'aviso' },
         ],
       },
     ]);
@@ -500,15 +508,23 @@ export const IaiChatScreen: React.FC<IaiChatScreenProps> = ({
 
   const handleSendMessage = async (
     textToSend?: string,
-    opts?: { audioMsgId?: string; pixIntent?: VoicePixIntent | null },
+    opts?: { audioMsgId?: string; pixIntent?: VoicePixIntent | null; userShown?: boolean },
   ) => {
     const text = (textToSend || inputValue).trim();
     // Mensagem de voz já está em "loading" (ouvindo o áudio), por isso não é bloqueada aqui
-    if (!text || (isLoading && !opts?.audioMsgId)) return;
+    if (!text || (isLoading && !opts?.audioMsgId && !opts?.userShown)) return;
 
     if (goalFlowStep > 0) {
       handleGoalFlowStep(text, opts?.audioMsgId);
       return;
+    }
+
+    // Jornada do salário esperando uma resposta: se for uma resposta da etapa, a jornada segue;
+    // se não for (outra pergunta), a mensagem já está na conversa e segue para a resposta normal.
+    if (planStageRef.current && !opts?.userShown) {
+      const tratou = await handlePlanText(text, opts?.audioMsgId);
+      if (tratou) return;
+      return handleSendMessage(text, { ...opts, audioMsgId: undefined, userShown: true });
     }
 
     const currentTime = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
@@ -528,6 +544,9 @@ export const IaiChatScreen: React.FC<IaiChatScreenProps> = ({
     if (opts?.audioMsgId) {
       // Guarda a transcrição no balão de áudio (não exibida) para histórico e cópia
       setMessages((prev) => prev.map((m) => (m.id === opts.audioMsgId ? { ...m, text } : m)));
+    } else if (opts?.userShown) {
+      // Já exibida pela jornada do salário
+      setInputValue('');
     } else {
       const userMsg: ChatMessage = {
         id: `user-${Date.now()}`,
@@ -841,6 +860,8 @@ export const IaiChatScreen: React.FC<IaiChatScreenProps> = ({
   };
 
   // ================= Jornada "plano do mês no dia do salário" =================
+  // Os cards de resposta aparecem só na saudação. Depois da primeira análise a conversa é livre (texto ou voz):
+  // cada etapa termina com uma pergunta e a resposta é interpretada (Gemini) para seguir a jornada.
   const wait = (ms: number) => new Promise((r) => setTimeout(r, ms));
   const pushUser = (text: string) =>
     setMessages((prev) => [...prev, { id: `user-${Date.now()}-${Math.random()}`, sender: 'user', text, timestamp: nowTime() }]);
@@ -851,8 +872,8 @@ export const IaiChatScreen: React.FC<IaiChatScreenProps> = ({
     ]);
 
   // "Analisando os dados": no produto, é onde roda o cálculo determinístico
-  const thinking = async (ms = 1300) => {
-    setCurrentLoadingSteps(['Analisando os dados']);
+  const thinking = async (ms = 1300, texto = 'Analisando os dados') => {
+    setCurrentLoadingSteps([texto]);
     setLoadingStep(0);
     setIsLoading(true);
     await wait(ms);
@@ -871,28 +892,174 @@ export const IaiChatScreen: React.FC<IaiChatScreenProps> = ({
     }
   };
 
-  const handlePlanCard = (card: PlanCard, msgId: string) => {
-    if (!card.action) {
-      notify('Caminho descrito no racional de experiência. A demo segue pelo fluxo principal.');
-      logEvento('path_not_in_demo', card.label);
-      return;
-    }
-    // Os cards somem depois do toque (como no protótipo)
-    setMessages((prev) => prev.map((m) => (m.id === msgId ? { ...m, planCards: undefined } : m)));
-    runPlanStep(card.action, card.label);
+  // Etapa atual da jornada e as respostas que ela aceita
+  const planStageRef = useRef<PlanStage>(null);
+  const setStage = (s: PlanStage) => {
+    planStageRef.current = s;
   };
 
-  const runPlanStep = async (action: PlanAction, label: string) => {
+  const opcoesDaEtapa = (stage: Exclude<PlanStage, null>, d: PlanoSalarioData): PlanOption[] => {
+    switch (stage) {
+      case 'depois_semana':
+      case 'depois_aviso':
+        return [
+          { id: 'saidas', descricao: 'quer ver o que ainda vai sair da conta até o salário (sim, quero, mostra)', palavras: ['sim', 'quero', 'mostra', 'pode', 'ver'] },
+          { id: 'encerrar', descricao: 'não quer agora (não, agora não, depois, obrigada)', palavras: ['não', 'nao', 'depois', 'obrigad'] },
+        ];
+      case 'corte':
+        return [
+          { id: 'ver_corte', descricao: 'aceita cortar os streamings / quer ver como fica sem eles', palavras: ['ver como fica', 'cortar', 'cancel', 'aceito', 'quero ver'] },
+          { id: 'outro_jeito', descricao: 'quer manter as assinaturas / pergunta se tem outro jeito / não quer cortar', palavras: ['outro', 'manter', 'não quero', 'nao quero', 'alternativa'] },
+        ];
+      case 'alternativa':
+        return [
+          { id: 'reagendar', descricao: 'escolhe reagendar o Pix para o dia do salário', palavras: ['reagend', 'pix', 'primeira', 'mudar a data'] },
+          {
+            id: 'segunda',
+            descricao:
+              d.projecao.saldoFinal < 0 || !d.ajusteGasto
+                ? 'escolhe deixar o limite da conta cobrir'
+                : `escolhe colocar um teto de gastos em ${d.ajusteGasto.categoria}`,
+            palavras: ['limite', 'teto', 'segunda'],
+          },
+          { id: 'nenhuma', descricao: 'não quer nenhuma das duas opções', palavras: ['nenhuma', 'nada', 'não quero', 'nao quero'] },
+        ];
+      case 'confirmacao':
+        return [
+          { id: 'confirmar', descricao: 'confirma o reagendamento (sim, pode, confirma, ok)', palavras: ['sim', 'pode', 'confirm', 'ok', 'bora', 'fechado'] },
+          { id: 'desistir', descricao: 'não quer reagendar agora (não, espera, cancelar)', palavras: ['não', 'nao', 'cancel', 'espera'] },
+        ];
+      case 'avisar':
+        return [
+          { id: 'avisar', descricao: 'quer avisar quem recebe o Pix (sim, avisa, manda)', palavras: ['sim', 'avis', 'manda', 'quero'] },
+          { id: 'nao_precisa', descricao: 'não precisa avisar', palavras: ['não', 'nao', 'precisa'] },
+        ];
+      case 'optin':
+        return [
+          { id: 'optin', descricao: 'aceita receber o aviso antes de um gasto apertar o mês (sim, pode, quero)', palavras: ['sim', 'pode', 'quero', 'avis'] },
+          { id: 'recusar', descricao: 'não quer receber o aviso agora', palavras: ['não', 'nao', 'agora não', 'depois'] },
+        ];
+    }
+  };
+
+  // Classifica a resposta livre; sem Gemini (ou com erro), usa palavras-chave
+  const classificar = async (texto: string, stage: Exclude<PlanStage, null>, opcoes: PlanOption[]): Promise<string | null> => {
+    try {
+      const r = await fetch('/api/plano-salario/intencao', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ texto, etapa: stage, opcoes: opcoes.map(({ id, descricao }) => ({ id, descricao })) }),
+      }).then((res) => res.json());
+      if (r.origem === 'gemini') return r.opcao ?? null;
+    } catch {
+      /* segue para as palavras-chave */
+    }
+    const t = texto.toLowerCase();
+    return opcoes.find((o) => o.palavras.some((p) => t.includes(p)))?.id ?? null;
+  };
+
+  /** Resposta livre durante a jornada. Devolve true se virou uma ação da jornada. */
+  const handlePlanText = async (text: string, audioMsgId?: string): Promise<boolean> => {
+    const stage = planStageRef.current;
+    const d = planoRef.current;
+    if (!stage || !d) return false;
+    if (audioMsgId) setMessages((prev) => prev.map((m) => (m.id === audioMsgId ? { ...m, text } : m)));
+    else {
+      pushUser(text);
+      setInputValue('');
+    }
+    setCurrentLoadingSteps(['Entendendo sua resposta']);
+    setLoadingStep(0);
+    setIsLoading(true);
+    const opcao = await classificar(text, stage, opcoesDaEtapa(stage, d));
+    setIsLoading(false);
+    if (!opcao) return false; // não é uma resposta da etapa: o chat responde normalmente (a pessoa já aparece na conversa)
+    logEvento('intent_classified', `${stage}=${opcao}`);
+    await runPlanAction(opcao, text, true);
+    return true;
+  };
+
+  const handlePlanCard = (card: PlanCard, msgId: string) => {
+    // Os cards (só na saudação) somem depois do toque
+    setMessages((prev) => prev.map((m) => (m.id === msgId ? { ...m, planCards: undefined } : m)));
+    runPlanAction(card.action, card.label, false);
+  };
+
+  const perguntarOptin = async () => {
+    await wait(700);
+    pushIai('Pra manter o mês no verde, posso te dar um toque antes de algum gasto apertar?');
+    setStage('optin');
+  };
+
+  const runPlanAction = async (action: string, label: string, userShown: boolean) => {
+    if (!userShown) pushUser(label);
     const d = await getPlano();
-    if (!d || !d.pix) {
+    if (!d) {
       notify('Não consegui carregar os dados do seu extrato agora. Tente de novo em instantes.');
       return;
     }
     const p = d.pix;
+    setStage(null);
 
+    // ---------- Card 1: quanto posso gastar por semana ----------
+    if (action === 'semana') {
+      logEvento('card_selected', 'weekly_budget');
+      await thinking();
+      const s = d.semana;
+      pushIai(
+        `Até o seu próximo salário, em ${d.cliente.proximoSalario.formatado}, são ${s.diasAteSalario} dias. Já descontando as contas que ainda vão sair (${brl(d.totalSaidas)}), dá pra gastar até **${brl(s.limiteSemanalHoje)} por semana** com tranquilidade.`,
+        { planBlock: 'semana' },
+      );
+      await wait(500);
+      pushIai(
+        d.projecao.saldoFinal < 0
+          ? `Mas atenção: mesmo no ritmo de costume, a conta fica negativa perto de ${d.projecao.diaQueAcabaFormatado}. Quer que eu te mostre o que ainda vai sair da sua conta e como resolver?`
+          : `Nesse ritmo você chega ao salário com ${brl(d.projecao.saldoFinal)}${d.semMargem ? ', uma folga pequena para qualquer imprevisto' : ''}. Quer que eu te mostre o que ainda vai sair da sua conta?`,
+      );
+      setStage('depois_semana');
+      return;
+    }
+
+    // ---------- Card 3: me avisa antes de um gasto apertar o mês ----------
+    if (action === 'aviso') {
+      logEvento('card_selected', 'spending_alert');
+      await thinking();
+      const exemplo = Math.max(50, Math.ceil((Math.max(0, d.projecao.saldoFinal) + 100) / 50) * 50);
+      let sim: any = null;
+      try {
+        sim = await fetch('/api/pix/simular', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ valor: exemplo }),
+        }).then((r) => r.json());
+      } catch {
+        sim = null;
+      }
+      pushIai(
+        `Claro! Hoje sua folga até o salário é de **${brl(d.projecao.saldoFinal)}**. ` +
+          (sim?.fica_negativo
+            ? `Um gasto de ${brl(exemplo)} fora do planejado já deixaria a conta [[neg:negativa a partir de ${sim.formatado?.dia_que_acaba_depois || 'antes do salário'}]]${sim.formatado?.juros_adicionais ? `, com cerca de ${sim.formatado.juros_adicionais} a mais de juros` : ''}.`
+            : `Um gasto de ${brl(exemplo)} fora do planejado ainda cabe, mas qualquer coisa acima disso aperta o mês.`),
+        { planBlock: 'grafico-neg' },
+      );
+      onPixGuardOptIn?.();
+      logEvento('alert_opt_in', 'pix_guard=on source=card');
+      await wait(600);
+      pushIai(
+        'Pronto, **aviso ativado** ✅. Antes de um Pix que aperte o mês, eu te mostro o impacto e você decide se continua. Quer que eu te mostre também o que ainda vai sair da sua conta até o salário?',
+      );
+      setStage('depois_aviso');
+      return;
+    }
+
+    if (action === 'encerrar') {
+      await wait(400);
+      pushIai('Combinado! Se precisar, é só me chamar por aqui. 🧡');
+      return;
+    }
+
+    // ---------- Card 2 (fluxo principal): saídas do mês + projeção + sugestão de corte ----------
     if (action === 'saidas') {
-      // Saídas do mês + projeção negativa + sugestão de corte
-      pushUser(label);
       logEvento('card_selected', 'upcoming_outflows');
       await thinking();
       pushIai(`Até o seu próximo salário, em ${d.cliente.proximoSalario.formatado}, ainda vão sair:`, { planBlock: 'saidas' });
@@ -912,27 +1079,36 @@ export const IaiChatScreen: React.FC<IaiChatScreenProps> = ({
         const lista = c.servicos.join(', ').replace(/, ([^,]*)$/, ' e $1');
         pushIai(
           c.resolve
-            ? `Tem um ajuste pequeno que ${d.projecao.saldoFinal < 0 ? 'muda isso' : 'aumenta essa folga'}: você tem ${c.servicos.length} serviços de vídeo (${lista}). Ficando só com ${c.mantido}, você economiza **${brl(c.economiaMensal)} por mês** e fecha o mês com [[pos:${brl(c.saldoFinalComCorte)} sobrando]]. Quer ver como fica?`
-            : `Tem um ajuste pequeno que ajuda: você tem ${c.servicos.length} serviços de vídeo (${lista}). Ficando só com ${c.mantido}, você economiza **${brl(c.economiaMensal)} por mês** e libera ${brl(c.ganhoAteSalario)} até o salário, mas ainda fecharia com [[neg:${signed(c.saldoFinalComCorte)}]]. Quer ver como fica?`,
-          {
-            planCards: [
-              { label: 'Quero ver como fica' },
-              { label: 'Prefiro manter as assinaturas' },
-              { label: 'Tem outro jeito?', action: 'alternativas' },
-            ],
-          },
+            ? `Tem um ajuste pequeno que ${d.projecao.saldoFinal < 0 ? 'muda isso' : 'aumenta essa folga'}: você tem ${c.servicos.length} serviços de vídeo (${lista}). Ficando só com ${c.mantido}, você economiza **${brl(c.economiaMensal)} por mês** e fecha o mês com [[pos:${brl(c.saldoFinalComCorte)} sobrando]].\n\nQuer ver como fica sem esses streamings, ou prefere outro jeito?`
+            : `Tem um ajuste pequeno que ajuda: você tem ${c.servicos.length} serviços de vídeo (${lista}). Ficando só com ${c.mantido}, você economiza **${brl(c.economiaMensal)} por mês** e libera ${brl(c.ganhoAteSalario)} até o salário, mas ainda fecharia com [[neg:${signed(c.saldoFinalComCorte)}]].\n\nQuer ver como fica sem esses streamings, ou prefere outro jeito?`,
         );
-      } else {
-        pushIai('Achei um jeito de mudar isso sem mexer nas suas assinaturas. Quer ver?', {
-          planCards: [{ label: 'Tem outro jeito?', action: 'alternativas' }],
-        });
+        setStage('corte');
+      } else if (p) {
+        pushIai('Achei um jeito de melhorar isso sem mexer nas suas assinaturas. Quer ver?');
+        setStage('corte');
       }
       return;
     }
 
-    if (action === 'alternativas') {
-      // Cliente recusa o corte → alternativas
-      pushUser(label);
+    // Aceitou o corte dos streamings
+    if (action === 'ver_corte' && d.corte) {
+      logEvento('suggestion_accepted', 'type=cancel_subscription');
+      fetch('/api/plano-salario/decisao', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ajusteId: d.corte.ajusteId, aceito: true }),
+      }).catch(() => {});
+      await thinking(900);
+      const cancelar = d.corte.servicos.filter((s) => s !== d.corte!.mantido).join(' e ');
+      pushIai(
+        `Fica assim: mantendo o ${d.corte.mantido} e cancelando ${cancelar}, você economiza **${brl(d.corte.economiaMensal)} por mês** e fecha este mês com [[${d.corte.saldoFinalComCorte >= 0 ? 'pos' : 'neg'}:${signed(d.corte.saldoFinalComCorte)}]]. O cancelamento é feito no app de cada serviço.`,
+      );
+      await perguntarOptin();
+      return;
+    }
+
+    // Recusou o corte → alternativas
+    if (action === 'outro_jeito' || (action === 'ver_corte' && !d.corte)) {
       logEvento('suggestion_rejected', 'type=cancel_subscription');
       if (d.corte) {
         fetch('/api/plano-salario/decisao', {
@@ -941,48 +1117,64 @@ export const IaiChatScreen: React.FC<IaiChatScreenProps> = ({
           body: JSON.stringify({ ajusteId: d.corte.ajusteId, aceito: false }),
         }).catch(() => {});
       }
+      if (!p) {
+        pushIai('Por enquanto não encontrei outra saída no seu extrato.');
+        await perguntarOptin();
+        return;
+      }
       await thinking();
-      pushIai('Claro! Achei duas saídas que não mexem nas suas assinaturas:', {
-        planBlock: 'alternativas',
-        planCards: [
-          { label: 'Reagendar o Pix', action: 'proposta' },
-          {
-            label:
-              d.projecao.saldoFinal < 0 || !d.ajusteGasto ? 'Usar o limite da conta' : `Colocar um teto em ${d.ajusteGasto.categoria}`,
-          },
-          { label: 'Nenhuma dessas' },
-        ],
-      });
+      pushIai('Claro! Achei duas saídas que não mexem nas suas assinaturas:', { planBlock: 'alternativas' });
       logEvento('alternatives_offered', 'n=2');
+      await wait(400);
+      pushIai('Qual dessas faz mais sentido pra você?');
+      setStage('alternativa');
       return;
     }
 
-    if (action === 'proposta') {
-      // Proposta com impacto nos dois meses
-      pushUser(label);
+    // Segunda alternativa: teto numa categoria (sem margem) ou limite da conta (negativo)
+    if (action === 'segunda') {
+      logEvento('alternative_selected', d.projecao.saldoFinal < 0 || !d.ajusteGasto ? 'overdraft' : 'category_cap');
+      await thinking(900);
+      if (d.projecao.saldoFinal >= 0 && d.ajusteGasto) {
+        pushIai(
+          `Combinado! Coloquei um teto de **${brl(d.ajusteGasto.tetoSugerido)}** em ${d.ajusteGasto.categoria} este mês. Quando você chegar perto dele, eu te aviso, assim esse gasto não vira o imprevisto que leva a conta ao negativo.`,
+        );
+      } else {
+        pushIai(
+          `Tudo bem. O limite da conta cobre esses dias, com cerca de ${brl(d.limiteConta.juros)} de juros. Se mudar de ideia, reagendar o Pix continua disponível.`,
+        );
+      }
+      await perguntarOptin();
+      return;
+    }
+
+    if (action === 'nenhuma' || action === 'desistir') {
+      await wait(500);
+      pushIai('Sem problemas, não mexi em nada. Se quiser rever depois, é só me chamar.');
+      await perguntarOptin();
+      return;
+    }
+
+    // Reagendar o Pix → proposta com impacto nos dois meses
+    if (action === 'reagendar' && p) {
       logEvento('alternative_selected', 'reschedule_pix');
       await thinking(900);
-      pushIai('Vou reagendar assim:', {
-        planBlock: 'proposta',
-        planCards: [
-          { label: 'Confirmar reagendamento', primary: true, action: 'biometria' },
-          { label: 'Escolher outra data' },
-          { label: 'Voltar' },
-        ],
-      });
+      pushIai('Vou reagendar assim:', { planBlock: 'proposta' });
+      await wait(400);
+      pushIai('Posso confirmar o reagendamento?');
+      setStage('confirmacao');
       return;
     }
 
-    if (action === 'biometria') {
-      pushUser(label);
+    // Confirmação → biometria
+    if (action === 'confirmar' && p) {
       setBioOpen(true);
       logEvento('auth_requested', 'biometrics');
       return;
     }
 
     if (action === 'avisar' || action === 'nao_precisa') {
-      pushUser(label);
-      if (action === 'avisar') {
+      if (action === 'avisar' && p) {
         const texto = `Oi! Reagendei o Pix de ${brl(p.valor)} para o dia ${p.novaData}.`;
         // O banco não envia a mensagem: abre o compartilhamento do celular
         try {
@@ -996,19 +1188,17 @@ export const IaiChatScreen: React.FC<IaiChatScreenProps> = ({
         }
         logEvento('share_opened');
       }
-      await wait(700);
-      pushIai('Pra manter o mês no verde, posso te dar um toque antes de algum gasto apertar?', {
-        planCards: [{ label: 'Pode me avisar', action: 'optin' }, { label: 'Agora não' }],
-      });
+      await perguntarOptin();
       return;
     }
 
-    if (action === 'optin') {
-      pushUser(label);
-      logEvento('alert_opt_in', 'pix_guard=on');
-      onPixGuardOptIn?.();
+    if (action === 'optin' || action === 'recusar') {
+      if (action === 'optin') {
+        logEvento('alert_opt_in', 'pix_guard=on');
+        onPixGuardOptIn?.();
+      }
       await wait(700);
-      pushIai('Combinado! Vou ficar de olho. 👀');
+      pushIai(action === 'optin' ? 'Combinado! Vou ficar de olho. 👀' : 'Tudo bem! Se mudar de ideia, é só me pedir.');
       pushIai('', { planBlock: 'avaliacao' });
     }
   };
@@ -1031,12 +1221,8 @@ export const IaiChatScreen: React.FC<IaiChatScreenProps> = ({
     );
     logEvento('projection_updated', `end_balance=${p.saldoFinalMes}`);
     await wait(500);
-    pushIai('Quer avisar quem recebe o Pix da nova data?', {
-      planCards: [
-        { label: 'Avisar quem recebe', action: 'avisar' },
-        { label: 'Não precisa', action: 'nao_precisa' },
-      ],
-    });
+    pushIai('Quer avisar quem recebe o Pix da nova data?');
+    setStage('avisar');
   };
 
   const handleAvaliacao = async (voto: 'up' | 'down', motivo: string) => {
@@ -1349,6 +1535,7 @@ export const IaiChatScreen: React.FC<IaiChatScreenProps> = ({
                   {msg.planBlock && plano && (
                     <>
                       {msg.planBlock === 'saidas' && <SaidasBox plano={plano} />}
+                      {msg.planBlock === 'semana' && <SemanaBox plano={plano} />}
                       {msg.planBlock === 'grafico-neg' && <ChartBox plano={plano} tipo="neg" />}
                       {msg.planBlock === 'grafico-pos' && <ChartBox plano={plano} tipo="pos" />}
                       {msg.planBlock === 'alternativas' && <AlternativasBox plano={plano} />}

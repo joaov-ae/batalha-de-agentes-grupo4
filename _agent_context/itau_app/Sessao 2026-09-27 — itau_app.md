@@ -58,7 +58,12 @@ Registro das decisões tomadas ao publicar o front end no Cloud Run. Código em 
 - Sem dados de Cofrinho na base: a 2ª alternativa virou "deixar o limite da conta cobrir" (juros do data_manager).
 - Destinatário do Pix não tem nome na base ("pix transf terc"): aparece como "Pix agendado (transferência)" e o
   card "Avisar quem recebe" abre o compartilhamento do celular (`navigator.share`).
-- Cards fora do caminho da demo mostram o aviso do protótipo e registram `path_not_in_demo`.
+- ~~Cards fora do caminho da demo mostram o aviso do protótipo~~ (substituído): os 3 cards da saudação trazem
+  análise real. "Quanto posso gastar por semana" = gasto variável de costume + sobra até o salário, por semana;
+  "Me avisa antes de um gasto apertar" = simula um gasto fora do planejado (`/api/pix/simular`) e ativa o aviso.
+- **Conversa sem botões depois da saudação**: cada etapa termina com uma pergunta; a resposta livre (texto ou voz)
+  é classificada por `POST /api/plano-salario/intencao` (Gemini, JSON com enum das opções da etapa; reserva por
+  palavras-chave). Resposta que não é da etapa segue para o chat normal.
 
 ## Cliente da demo: "Renata Lopes" (nome fictício, dados reais)
 

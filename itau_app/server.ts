@@ -875,7 +875,10 @@ app.get('/api/plano-salario', async (_req: Request, res: Response) => {
 
   // Quanto dá pra gastar por semana: o gasto de costume + a sobra distribuída até o salário
   const diasAteSalario = Number(st.dias_ate_salario) || pontos.length || 1;
-  const limiteSemanal = round2((Number(d.projecao.saida_variavel_diaria || 0) + Math.max(0, saldoFinalMes) / diasAteSalario) * 7);
+  const variavelDiaria = Number(d.projecao.saida_variavel_diaria || 0);
+  const limiteSemanal = round2((variavelDiaria + Math.max(0, saldoFinalMes) / diasAteSalario) * 7);
+  // Hoje, sem nenhum ajuste
+  const semanalHoje = round2((variavelDiaria + Math.max(0, saldoFinal) / diasAteSalario) * 7);
 
   const saidas = (d.compromissos.compromissos || []).map((c: any) => ({
     ...nomeAmigavel(c.descricao),
@@ -949,8 +952,56 @@ app.get('/api/plano-salario', async (_req: Request, res: Response) => {
       : null,
     // Folga "sem margem": abaixo de 10% da renda (mesmo corte do estado zero_a_zero)
     semMargem: saldoFinal >= 0 && saldoFinal <= 0.1 * Number(st.renda_mensal),
+    // "Quanto posso gastar por semana?": gasto variável de costume + sobra até o salário
+    semana: {
+      diasAteSalario,
+      semanas: round2(diasAteSalario / 7),
+      gastoDeCostumeSemana: round2(variavelDiaria * 7),
+      sobraAteSalario: round2(saldoFinal),
+      limiteSemanalHoje: semanalHoje,
+      limiteSemanalComAjuste: limiteSemanal,
+    },
     proximoMes: { entradas: round2(entradasMes), saidasFixas: round2(saidasMes), gastoDiaADia: round2(variavelMes) },
   });
+});
+
+// Endpoint: entende a resposta livre da cliente numa etapa da jornada (conversa sem botões).
+// Recebe a etapa e as opções possíveis; devolve o id da opção ou null (aí o chat responde normalmente).
+app.post('/api/plano-salario/intencao', async (req: Request, res: Response) => {
+  const { texto, etapa, opcoes } = req.body || {};
+  if (typeof texto !== 'string' || !texto.trim() || !Array.isArray(opcoes) || !opcoes.length) {
+    return res.status(400).json({ error: 'Pedido inválido.' });
+  }
+  const lista = opcoes
+    .filter((o: any) => typeof o?.id === 'string' && typeof o?.descricao === 'string')
+    .slice(0, 8)
+    .map((o: any) => ({ id: o.id.slice(0, 40), descricao: o.descricao.slice(0, 200) }));
+  if (!geminiEnabled) return res.json({ opcao: null, origem: 'sem_llm' });
+
+  try {
+    const response = await ai.models.generateContent({
+      model: GEMINI_MODEL,
+      contents:
+        `Etapa da conversa: ${String(etapa || '').slice(0, 80)}\n` +
+        `Opções:\n${lista.map((o) => `- ${o.id}: ${o.descricao}`).join('\n')}\n\n` +
+        `Resposta da cliente: """${texto.slice(0, 500)}"""\n\n` +
+        'Qual opção a cliente escolheu? Se a resposta não corresponder claramente a nenhuma opção (ex.: é outra pergunta), responda null.',
+      config: {
+        temperature: 0,
+        responseMimeType: 'application/json',
+        responseSchema: {
+          type: Type.OBJECT,
+          properties: { opcao: { type: Type.STRING, nullable: true, enum: lista.map((o) => o.id) } },
+        },
+      },
+    });
+    const parsed = JSON.parse(response.text || '{}');
+    const opcao = lista.some((o) => o.id === parsed.opcao) ? parsed.opcao : null;
+    return res.json({ opcao, origem: 'gemini' });
+  } catch (err) {
+    console.warn('Intenção da jornada:', err instanceof Error ? err.message : err);
+    return res.json({ opcao: null, origem: 'erro' });
+  }
 });
 
 // Endpoint: registra a decisão do cliente sobre um ajuste (memória do agente no data_manager)
@@ -1020,7 +1071,7 @@ const EVENTOS_PERMITIDOS = new Set([
   'fab_opened', 'card_selected', 'risk_projected', 'suggestion_rejected', 'alternatives_offered',
   'alternative_selected', 'auth_requested', 'pix_rescheduled', 'projection_updated', 'share_opened',
   'alert_opt_in', 'feedback', 'month_end_check', 'chat_closed', 'path_not_in_demo', 'pix_guard_warned',
-  'pix_guard_continued',
+  'pix_guard_continued', 'intent_classified', 'suggestion_accepted',
 ]);
 app.post('/api/eventos', (req: Request, res: Response) => {
   const { name, detail } = req.body || {};
