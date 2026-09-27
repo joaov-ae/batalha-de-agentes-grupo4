@@ -1,12 +1,15 @@
 import json
+import sys
 import unittest
 from datetime import date, datetime, timezone
+from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch
 
-from fastapi import HTTPException
-from fastapi.testclient import TestClient
-from pydantic import ValidationError
+# Adiciona o diretório do financial-agent ao sys.path para suportar execução na raiz do monorepo
+_AGENT_DIR = Path(__file__).resolve().parent.parent
+if str(_AGENT_DIR) not in sys.path:
+    sys.path.insert(0, str(_AGENT_DIR))
 
 from agent_finance import (
     AgentResponse,
@@ -28,7 +31,10 @@ from data_manager_client import (
     get_customer_adjustments,
     get_customer_snapshot,
 )
+from fastapi import HTTPException
+from fastapi.testclient import TestClient
 from guardrails_client import GuardrailsUnavailable
+from pydantic import ValidationError
 
 
 class FinanceContextTests(unittest.TestCase):

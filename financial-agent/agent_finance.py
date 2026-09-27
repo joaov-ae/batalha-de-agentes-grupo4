@@ -14,9 +14,8 @@ from zoneinfo import ZoneInfo
 from dotenv import load_dotenv
 from google import genai
 from google.cloud import bigquery
-from pydantic import BaseModel, ConfigDict, Field, ValidationError
-
 from guardrails_client import GuardrailsUnavailable, check_input, check_output
+from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 load_dotenv(Path(__file__).resolve().parent / ".env")
 

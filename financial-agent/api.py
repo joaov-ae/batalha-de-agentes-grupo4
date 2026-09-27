@@ -8,12 +8,6 @@ import unicodedata
 from functools import lru_cache
 
 import firebase_admin
-from fastapi import FastAPI, Header, HTTPException
-from fastapi.middleware.cors import CORSMiddleware
-from firebase_admin import auth as firebase_auth
-from google import genai
-from pydantic import BaseModel, Field
-
 from agent_finance import (
     AGENT_TONE,
     MODEL_CANDIDATES,
@@ -28,23 +22,29 @@ from data_manager_client import (
     get_customer_adjustments,
     get_customer_snapshot,
 )
+from fastapi import FastAPI, Header, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
+from firebase_admin import auth as firebase_auth
+from google import genai
 from guardrails_client import GuardrailsUnavailable, check_input, check_output
+from pydantic import BaseModel, Field
 
 logger = logging.getLogger("financial_agent")
 app = FastAPI(title="Financial Agent API", version="1.0.0")
 
+raw_origins = os.getenv("ALLOWED_ORIGINS") or "http://localhost:3000,http://localhost:5173,http://localhost:8080"
 allowed_origins = [
     origin.strip()
-    for origin in os.getenv("ALLOWED_ORIGINS", "").split(",")
+    for origin in raw_origins.split(",")
     if origin.strip()
 ]
-if allowed_origins:
-    app.add_middleware(
-        CORSMiddleware,
-        allow_origins=allowed_origins,
-        allow_methods=["GET", "POST"],
-        allow_headers=["Authorization", "Content-Type", "X-Firebase-ID-Token", "X-Demo-Access-Key"],
-    )
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=allowed_origins,
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 
 class AnalyzeRequest(BaseModel):
@@ -525,7 +525,6 @@ async def savings(
 
     try:
         snapshot = await asyncio.to_thread(get_customer_snapshot, user_id)
-# ... (mantém o resto)
         status = snapshot["status"]
         if status.get("encaminhar_atendimento") or status.get("estado") == "ja_no_buraco":
             plan = _adjustments_response([], status)
