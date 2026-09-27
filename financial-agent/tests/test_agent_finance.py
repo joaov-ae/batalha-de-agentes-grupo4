@@ -571,6 +571,34 @@ class FinanceContextTests(unittest.TestCase):
         self.assertIn("DADOS DO CLIENTE (fonte: data_manager /recorrencias)", prompt)
         self.assertIn("R$ 41,28", prompt)
 
+    def test_chat_prompt_states_capability_limits_with_parsimony(self):
+        fake_client = unittest.mock.Mock()
+        fake_client.models.generate_content.return_value.text = (
+            '{"mensagem":"Isso eu não consigo fazer por aqui. Quer que eu detalhe suas assinaturas?"}'
+        )
+        with patch("api.chat_client", return_value=fake_client):
+            generate_chat_message("Me passa o link mais fácil", "fecha_bem", None, "", self.finance_context)
+        system = fake_client.models.generate_content.call_args.kwargs["config"]["system_instruction"]
+        self.assertIn("Capacidades:", system)
+        self.assertIn("não envia links", system)
+        self.assertIn("Só diga que não consegue quando o pedido for uma dessas ações", system)
+        self.assertIn("na dúvida, responde com os dados", system)
+        self.assertIn("nunca mostrar links, caminhos ou telas", system)
+
+    def test_chat_action_request_goes_to_model_not_canned_reply(self):
+        self.assertIsNone(chat_scope_response("Me passa o link mais fácil"))
+        client = TestClient(app)
+        snapshot = {"status": {"estado": "fecha_bem", "encaminhar_atendimento": False, "data_referencia": "2025-12-15"}, "ritmo": {}}
+        with patch.dict("os.environ", {"DEMO_MODE": "true"}), patch(
+            "api.get_customer_snapshot", return_value=snapshot
+        ), patch("api.generate_chat_message", return_value="Isso eu não consigo fazer por aqui.") as generate:
+            response = client.post(
+                "/chat", json={"user_id": self.demo_user_id, "message": "Me passa o link mais fácil"}, headers=self.demo_headers
+            )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["status"], "respondido")
+        generate.assert_called_once()
+
     def test_chat_allows_citing_essentials_but_blocks_suggesting_cuts_on_them(self):
         fake_client = unittest.mock.Mock()
         with patch("api.chat_client", return_value=fake_client):

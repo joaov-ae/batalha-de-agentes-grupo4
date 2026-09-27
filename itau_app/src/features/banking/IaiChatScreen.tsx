@@ -144,6 +144,9 @@ const GOAL_FLOW_CHIPS: Record<1 | 2 | 3, string[]> = {
   3: ['12 meses', 'dezembro 2028', 'dezembro 2030'],
 };
 
+// Mensagem única para falha técnica do chat: nunca inventar uma resposta no lugar da IA
+const CHAT_ERROR_TEXT = 'Não consegui falar com o assistente agora. Pode tentar de novo em alguns instantes?';
+
 // Respostas sugeridas e ideias para o usuário clicar com um toque
 export const QUICK_SUGGESTIONS = [
   { icon: '🏖️', label: 'Lazer sem culpa', prompt: 'Quanto posso gastar com lazer sem culpa?' },
@@ -787,21 +790,22 @@ export const IaiChatScreen: React.FC<IaiChatScreenProps> = ({
             m.id === msgId
               ? {
                   ...m,
-                  text: accumulatedText.trim() || `Entendi, ${cliente.primeiroNome}. Posso te ajudar com detalhes sobre seus cartões Personnalité, CDB ou planejamento de gastos.`,
-                  ...extraProps,
+                  // Stream vazio é falha: mostra o erro honesto, sem os botões de ação
+                  ...(accumulatedText.trim() ? { text: accumulatedText.trim(), ...extraProps } : { text: CHAT_ERROR_TEXT }),
                 }
               : m
           )
         );
       } else {
-        const data = await response.json();
+        const data = response.ok ? await response.json().catch(() => null) : null;
 
+        // Sem texto do agente (HTTP de erro ou corpo inválido): erro honesto, sem os botões de ação
         const iaiMsg: ChatMessage = {
           id: `iai-${Date.now()}`,
           sender: 'iai',
-          text: data.text || `Entendi, ${cliente.primeiroNome}. Posso te ajudar com detalhes sobre seus cartões Personnalité, CDB ou planejamento de gastos.`,
+          text: data?.text || CHAT_ERROR_TEXT,
           timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-          ...extraProps,
+          ...(data?.text ? extraProps : {}),
         };
 
         setMessages((prev) => [...prev, iaiMsg]);
@@ -813,7 +817,7 @@ export const IaiChatScreen: React.FC<IaiChatScreenProps> = ({
         {
           id: `iai-${Date.now()}`,
           sender: 'iai',
-          text: 'Com base no seu perfil Personnalité Nível 4, organizei o raio-x e limites para você programar seu mês com total segurança.',
+          text: CHAT_ERROR_TEXT,
           timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
         },
       ]);

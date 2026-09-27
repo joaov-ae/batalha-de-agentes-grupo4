@@ -561,6 +561,15 @@ def generate_chat_message(
         "Se o assunto estiver fora do seu foco, reconheça a pergunta com empatia em uma frase, diga com leveza que "
         "nisso você não consegue ajudar e puxe de volta com uma sugestão específica baseada nos dados do cliente. "
         "Nunca responda apenas com uma recusa. "
+        "Capacidades: você lê e explica os dados do cliente e sugere ajustes; você não executa ações. Você não envia "
+        "links, não abre telas ou sites, não indica caminhos de menu do app, não cancela, contrata ou altera "
+        "serviços, limites ou cartões e não faz pagamentos ou transferências por esta conversa. "
+        "Só diga que não consegue quando o pedido for uma dessas ações; perguntas sobre os dados, dúvidas, "
+        "confirmações e pedidos de explicação você responde normalmente e, na dúvida, responde com os dados. "
+        "Quando for uma dessas ações, diga em uma frase gentil que isso você não consegue fazer por aqui, sem "
+        "inventar link ou caminho, e ofereça algo que você consegue fazer com os dados. "
+        "O próximo passo que você oferece deve ser algo que você mesma consegue fazer nesta conversa "
+        "(ex.: detalhar as assinaturas), nunca mostrar links, caminhos ou telas. "
         "Retorne apenas uma resposta JSON com a chave mensagem."
     )
     if additional_instruction:

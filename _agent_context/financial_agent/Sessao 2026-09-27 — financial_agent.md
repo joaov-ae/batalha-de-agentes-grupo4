@@ -64,3 +64,11 @@ Motivação: em `_agent_context/resposta_demo/`, "Entendi" recebia um corte seco
 - Correção: o retry de tom agora repassa o `estado` e os dados (antes lia `tool_context["estado"]`, que não existe).
 - **Limitação conhecida da S07**: ela aceita qualquer valor a até R$ 1 (ou 1%) de *algum* número do contexto. Com o resumo anual (~270 números), um valor inventado pode coincidir (ex.: R$ 59,90 ≈ R$ 59,76). Valores fora dessas faixas são barrados.
 - Testes: 50 no financial-agent.
+
+## 9. Limites de capacidade com parcimônia e fim dos mocks do front (2026-09-27)
+Motivação: na captura `resposta_demo/b170e43f-….jpeg`, "Me passa o link mais fácil" recebeu "Com base no seu perfil Personnalité Nível 4, organizei o raio-x…", um texto fixo do `catch` do front, não da IA. A pergunta foi puxada por uma oferta anterior ("Deseja que eu te mostre o caminho…") feita pelo Gemini local do BFF antigo.
+- **Bloco "Capacidades" no prompt do `/chat`** (`generate_chat_message`): o agente lê e explica dados e sugere ajustes, mas não executa ações. Não envia links, não abre telas ou sites, não indica caminhos de menu, não cancela, contrata ou altera serviços, limites ou cartões, e não faz pagamentos.
+- **Parcimônia**: ele só diz que não consegue quando o pedido é uma dessas ações. Perguntas sobre dados, dúvidas e confirmações são respondidas normalmente e, na dúvida, com os dados. O próximo passo oferecido tem de ser algo que o próprio agente consegue fazer. Não há filtro por palavra-chave: "Me passa o link" vai ao LLM (teste `test_chat_action_request_goes_to_model_not_canned_reply`).
+- **Front (`itau_app/.../IaiChatScreen.tsx`)**: os 3 textos fixos ("Entendi… cartões Personnalité, CDB…" e "perfil Personnalité Nível 4…") viraram `CHAT_ERROR_TEXT`, uma mensagem honesta de falha, sem os botões de ação. HTTP de erro do BFF também cai nela.
+- O commit `4171228` (Isaddora) já removeu o Gemini local do BFF (timeout do agente: 30s), o que substitui o ajuste 8→12s da seção 8.
+- Testes: 55 no financial-agent; `tsc --noEmit` no itau_app.
