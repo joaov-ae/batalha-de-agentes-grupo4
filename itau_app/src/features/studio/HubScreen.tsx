@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { IaiFloatingButton } from '../../design-system/molecules/IaiFloatingButton';
+import { useCliente, brlCliente } from '../cliente/ClienteContext';
 import { 
   Eye, 
   EyeOff, 
@@ -49,6 +50,7 @@ export const HubScreen: React.FC<HubScreenProps> = ({
   saldo,
   limiteConta,
 }) => {
+  const cliente = useCliente();
   // Saldo exibido por padrão conforme solicitado
   const [showBalance, setShowBalance] = useState<boolean>(true);
   const [pointsToast, setPointsToast] = useState(false);
@@ -76,7 +78,7 @@ export const HubScreen: React.FC<HubScreenProps> = ({
       {/* Top Header - Itaú Personnalité Style (Fixo no topo da tela mobile) */}
       <header className="bg-white px-4 pt-3 pb-3 border-b border-[#E8ECEF] flex-shrink-0 z-10">
         <div className="flex items-center justify-between">
-          {/* Avatar Maria Andrade + Badge Nível 4 */}
+          {/* Avatar da cliente + Badge Nível 4 */}
           <div className="flex items-center gap-2.5">
             <div className="relative">
               <div className="w-10 h-10 rounded-full bg-[#002244] text-white flex items-center justify-center font-bold text-sm tracking-tight shadow-sm border border-slate-200">
@@ -258,7 +260,7 @@ export const HubScreen: React.FC<HubScreenProps> = ({
         >
           <div className="flex items-center justify-between gap-3">
             <p className="text-xs font-medium text-slate-800 leading-relaxed pr-1">
-              <strong>R$ 10.000,00 a mais na conta!</strong> Vamos programar os gastos deste mês, na medida para você?
+              <strong>{brlCliente(cliente.renda.salario)} a mais na conta!</strong> Vamos programar os gastos deste mês, na medida para você?
             </p>
             <div className="flex-shrink-0">
               <Sparkles className="w-4 h-4 text-itau-orange animate-pulse" />

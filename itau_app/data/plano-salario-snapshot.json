@@ -1,694 +1,766 @@
 {
-    "fonte":  "data_manager_itau (data_referencia 2025-12-15), copiado em 2026-09-27",
-    "id_usuario":  "d6c59567-bb6d-4a01-a0bd-f9b6f811724b",
-    "status":  {
-                   "id_usuario":  "d6c59567-bb6d-4a01-a0bd-f9b6f811724b",
-                   "data_referencia":  "2025-12-15",
-                   "estado":  "vai_faltar",
-                   "saldo_hoje":  3776.24,
-                   "renda_mensal":  7383.22,
-                   "proximo_salario_data":  "2026-01-07",
-                   "proximo_salario_valor":  5187.27,
-                   "dias_ate_salario":  23,
-                   "saldo_projetado_vespera_salario":  -883.22,
-                   "saldo_minimo_projetado":  -883.22,
-                   "data_saldo_minimo":  "2026-01-06",
-                   "dia_que_acaba":  "2026-01-06",
-                   "compromissos_ate_salario":  4451.78,
-                   "disponivel_ate_salario":  -675.54,
-                   "sobra_por_dia":  0.0,
-                   "reserva_sugerida":  0.0,
-                   "score_alerta":  3,
-                   "sinais":  [
-                                  "dias_no_negativo",
-                                  "juros_de_limite",
-                                  "emprestimo"
-                              ],
-                   "antecipar_aviso":  false,
-                   "juros_estimados":  0.9,
-                   "encaminhar_atendimento":  false,
-                   "formatado":  {
-                                     "saldo_hoje":  "R$ 3.776,24",
-                                     "sobra_ate_salario":  "R$ 0,00",
-                                     "sobra_por_dia":  "R$ 0,00",
-                                     "proximo_salario":  "7 de janeiro",
-                                     "dia_que_acaba":  "6 de janeiro",
-                                     "saldo_vespera_salario":  "-R$ 883,22",
-                                     "juros_estimados":  "R$ 0,90",
-                                     "reserva_sugerida":  null
-                                 }
-               },
-    "compromissos":  {
-                         "id_usuario":  "d6c59567-bb6d-4a01-a0bd-f9b6f811724b",
-                         "ate":  "2026-01-06",
-                         "proximo_salario_data":  "2026-01-07",
-                         "total_saidas":  4451.78,
-                         "total_entradas":  0,
-                         "compromissos":  [
-                                              {
-                                                  "data":  "2025-12-16",
-                                                  "descricao":  "debito conta parc emprest",
-                                                  "valor":  -956.44,
-                                                  "tipo_item":  "financiamento",
-                                                  "reagendavel":  false,
-                                                  "formatado":  {
-                                                                    "valor":  "R$ 956,44",
-                                                                    "data":  "16 de dezembro"
-                                                                }
-                                              },
-                                              {
-                                                  "data":  "2025-12-16",
-                                                  "descricao":  "da tv cabo",
-                                                  "valor":  -88.04,
-                                                  "tipo_item":  "conta_fixa",
-                                                  "reagendavel":  false,
-                                                  "formatado":  {
-                                                                    "valor":  "R$ 88,04",
-                                                                    "data":  "16 de dezembro"
-                                                                }
-                                              },
-                                              {
-                                                  "data":  "2025-12-18",
-                                                  "descricao":  "plano cel",
-                                                  "valor":  -22.6,
-                                                  "tipo_item":  "conta_fixa",
-                                                  "reagendavel":  false,
-                                                  "formatado":  {
-                                                                    "valor":  "R$ 22,60",
-                                                                    "data":  "18 de dezembro"
-                                                                }
-                                              },
-                                              {
-                                                  "data":  "2025-12-20",
-                                                  "descricao":  "debito conta tar pacote",
-                                                  "valor":  -27.11,
-                                                  "tipo_item":  "conta_fixa",
-                                                  "reagendavel":  false,
-                                                  "formatado":  {
-                                                                    "valor":  "R$ 27,11",
-                                                                    "data":  "20 de dezembro"
-                                                                }
-                                              },
-                                              {
-                                                  "data":  "2025-12-23",
-                                                  "descricao":  "seg resid",
-                                                  "valor":  -36.26,
-                                                  "tipo_item":  "conta_fixa",
-                                                  "reagendavel":  false,
-                                                  "formatado":  {
-                                                                    "valor":  "R$ 36,26",
-                                                                    "data":  "23 de dezembro"
-                                                                }
-                                              },
-                                              {
-                                                  "data":  "2025-12-26",
-                                                  "descricao":  "pag bol seg carro",
-                                                  "valor":  -1294.67,
-                                                  "tipo_item":  "conta_fixa",
-                                                  "reagendavel":  false,
-                                                  "formatado":  {
-                                                                    "valor":  "R$ 1.294,67",
-                                                                    "data":  "26 de dezembro"
-                                                                }
-                                              },
-                                              {
-                                                  "data":  "2025-12-26",
-                                                  "descricao":  "debito conta seg vida",
-                                                  "valor":  -68.94,
-                                                  "tipo_item":  "conta_fixa",
-                                                  "reagendavel":  false,
-                                                  "formatado":  {
-                                                                    "valor":  "R$ 68,94",
-                                                                    "data":  "26 de dezembro"
-                                                                }
-                                              },
-                                              {
-                                                  "data":  "2026-01-03",
-                                                  "descricao":  "debito conta parc emprest",
-                                                  "valor":  -956.44,
-                                                  "tipo_item":  "financiamento",
-                                                  "reagendavel":  false,
-                                                  "formatado":  {
-                                                                    "valor":  "R$ 956,44",
-                                                                    "data":  "3 de janeiro"
-                                                                }
-                                              },
-                                              {
-                                                  "data":  "2026-01-05",
-                                                  "descricao":  "assin paramount plus",
-                                                  "valor":  -38.51,
-                                                  "tipo_item":  "assinatura",
-                                                  "reagendavel":  false,
-                                                  "formatado":  {
-                                                                    "valor":  "R$ 38,51",
-                                                                    "data":  "5 de janeiro"
-                                                                }
-                                              },
-                                              {
-                                                  "data":  "2026-01-06",
-                                                  "descricao":  "pix transf terc",
-                                                  "valor":  -962.77,
-                                                  "tipo_item":  "conta_fixa",
-                                                  "reagendavel":  true,
-                                                  "formatado":  {
-                                                                    "valor":  "R$ 962,77",
-                                                                    "data":  "6 de janeiro"
-                                                                }
-                                              }
-                                          ]
-                     },
-    "projecao":  {
-                     "id_usuario":  "d6c59567-bb6d-4a01-a0bd-f9b6f811724b",
-                     "data_referencia":  "2025-12-15",
-                     "saldo_inicial":  3776.24,
-                     "fim":  "2026-01-06",
-                     "saida_variavel_diaria":  9.44,
-                     "saldo_final":  -883.22,
-                     "saldo_minimo":  -883.22,
-                     "dia_que_acaba":  "2026-01-06",
-                     "pontos":  [
-                                    {
-                                        "data":  "2025-12-16",
-                                        "saldo":  2722.32,
-                                        "eventos":  [
-                                                        {
-                                                            "data":  "2025-12-16",
-                                                            "descricao":  "debito conta parc emprest",
-                                                            "valor":  -956.44,
-                                                            "tipo_item":  "financiamento"
-                                                        },
-                                                        {
-                                                            "data":  "2025-12-16",
-                                                            "descricao":  "da tv cabo",
-                                                            "valor":  -88.04,
-                                                            "tipo_item":  "conta_fixa"
-                                                        }
-                                                    ]
-                                    },
-                                    {
-                                        "data":  "2025-12-17",
-                                        "saldo":  2712.88,
-                                        "eventos":  [
-
-                                                    ]
-                                    },
-                                    {
-                                        "data":  "2025-12-18",
-                                        "saldo":  2680.84,
-                                        "eventos":  [
-                                                        {
-                                                            "data":  "2025-12-18",
-                                                            "descricao":  "plano cel",
-                                                            "valor":  -22.6,
-                                                            "tipo_item":  "conta_fixa"
-                                                        }
-                                                    ]
-                                    },
-                                    {
-                                        "data":  "2025-12-19",
-                                        "saldo":  2671.4,
-                                        "eventos":  [
-
-                                                    ]
-                                    },
-                                    {
-                                        "data":  "2025-12-20",
-                                        "saldo":  2634.85,
-                                        "eventos":  [
-                                                        {
-                                                            "data":  "2025-12-20",
-                                                            "descricao":  "debito conta tar pacote",
-                                                            "valor":  -27.11,
-                                                            "tipo_item":  "conta_fixa"
-                                                        }
-                                                    ]
-                                    },
-                                    {
-                                        "data":  "2025-12-21",
-                                        "saldo":  2625.41,
-                                        "eventos":  [
-
-                                                    ]
-                                    },
-                                    {
-                                        "data":  "2025-12-22",
-                                        "saldo":  2615.97,
-                                        "eventos":  [
-
-                                                    ]
-                                    },
-                                    {
-                                        "data":  "2025-12-23",
-                                        "saldo":  2570.27,
-                                        "eventos":  [
-                                                        {
-                                                            "data":  "2025-12-23",
-                                                            "descricao":  "seg resid",
-                                                            "valor":  -36.26,
-                                                            "tipo_item":  "conta_fixa"
-                                                        }
-                                                    ]
-                                    },
-                                    {
-                                        "data":  "2025-12-24",
-                                        "saldo":  2560.83,
-                                        "eventos":  [
-
-                                                    ]
-                                    },
-                                    {
-                                        "data":  "2025-12-25",
-                                        "saldo":  2551.39,
-                                        "eventos":  [
-
-                                                    ]
-                                    },
-                                    {
-                                        "data":  "2025-12-26",
-                                        "saldo":  1178.34,
-                                        "eventos":  [
-                                                        {
-                                                            "data":  "2025-12-26",
-                                                            "descricao":  "pag bol seg carro",
-                                                            "valor":  -1294.67,
-                                                            "tipo_item":  "conta_fixa"
-                                                        },
-                                                        {
-                                                            "data":  "2025-12-26",
-                                                            "descricao":  "debito conta seg vida",
-                                                            "valor":  -68.94,
-                                                            "tipo_item":  "conta_fixa"
-                                                        }
-                                                    ]
-                                    },
-                                    {
-                                        "data":  "2025-12-27",
-                                        "saldo":  1168.9,
-                                        "eventos":  [
-
-                                                    ]
-                                    },
-                                    {
-                                        "data":  "2025-12-28",
-                                        "saldo":  1159.46,
-                                        "eventos":  [
-
-                                                    ]
-                                    },
-                                    {
-                                        "data":  "2025-12-29",
-                                        "saldo":  1150.02,
-                                        "eventos":  [
-
-                                                    ]
-                                    },
-                                    {
-                                        "data":  "2025-12-30",
-                                        "saldo":  1140.58,
-                                        "eventos":  [
-
-                                                    ]
-                                    },
-                                    {
-                                        "data":  "2025-12-31",
-                                        "saldo":  1131.14,
-                                        "eventos":  [
-
-                                                    ]
-                                    },
-                                    {
-                                        "data":  "2026-01-01",
-                                        "saldo":  1121.7,
-                                        "eventos":  [
-
-                                                    ]
-                                    },
-                                    {
-                                        "data":  "2026-01-02",
-                                        "saldo":  1112.26,
-                                        "eventos":  [
-
-                                                    ]
-                                    },
-                                    {
-                                        "data":  "2026-01-03",
-                                        "saldo":  146.38,
-                                        "eventos":  [
-                                                        {
-                                                            "data":  "2026-01-03",
-                                                            "descricao":  "debito conta parc emprest",
-                                                            "valor":  -956.44,
-                                                            "tipo_item":  "financiamento"
-                                                        }
-                                                    ]
-                                    },
-                                    {
-                                        "data":  "2026-01-04",
-                                        "saldo":  136.94,
-                                        "eventos":  [
-
-                                                    ]
-                                    },
-                                    {
-                                        "data":  "2026-01-05",
-                                        "saldo":  88.99,
-                                        "eventos":  [
-                                                        {
-                                                            "data":  "2026-01-05",
-                                                            "descricao":  "assin paramount plus",
-                                                            "valor":  -38.51,
-                                                            "tipo_item":  "assinatura"
-                                                        }
-                                                    ]
-                                    },
-                                    {
-                                        "data":  "2026-01-06",
-                                        "saldo":  -883.22,
-                                        "eventos":  [
-                                                        {
-                                                            "data":  "2026-01-06",
-                                                            "descricao":  "pix transf terc",
-                                                            "valor":  -962.77,
-                                                            "tipo_item":  "conta_fixa"
-                                                        }
-                                                    ]
-                                    }
-                                ]
-                 },
-    "ajustes":  {
-                    "id_usuario":  "d6c59567-bb6d-4a01-a0bd-f9b6f811724b",
-                    "estado":  "vai_faltar",
-                    "encaminhar_atendimento":  false,
-                    "ajustes":  [
-                                    {
-                                        "ajuste_id":  "mudanca_data:Outras transferencias",
-                                        "tipo":  "mudanca_data",
-                                        "titulo":  "Agendar pix transf terc para 07/01, dia do salário",
-                                        "valor":  962.77,
-                                        "impacto_dias":  1,
-                                        "resolve":  true,
-                                        "ganho_vespera_salario":  962.77,
-                                        "esforco":  1,
-                                        "acao":  "agendar_pix",
-                                        "detalhes":  {
-                                                         "categoria":  "Outras transferencias",
-                                                         "datas_previstas":  [
-                                                                                 "2026-01-06"
-                                                                             ],
-                                                         "data_sugerida":  "2026-01-07"
-                                                     },
-                                        "formatado":  {
-                                                          "valor":  "R$ 962,77",
-                                                          "impacto":  "resolve: o dinheiro chega até o salário"
-                                                      }
-                                    },
-                                    {
-                                        "ajuste_id":  "assinatura_redundante:video",
-                                        "tipo":  "assinatura_redundante",
-                                        "titulo":  "3 serviços de vídeo: globoplay, hbo max, paramount plus",
-                                        "valor":  72.95,
-                                        "impacto_dias":  0,
-                                        "resolve":  false,
-                                        "ganho_vespera_salario":  38.51,
-                                        "esforco":  2,
-                                        "acao":  null,
-                                        "detalhes":  {
-                                                         "grupo":  "video",
-                                                         "servicos":  [
-                                                                          {
-                                                                              "servico":  "globoplay",
-                                                                              "valor_mensal":  34.6,
-                                                                              "dia_cobranca":  11
-                                                                          },
-                                                                          {
-                                                                              "servico":  "hbo max",
-                                                                              "valor_mensal":  34.44,
-                                                                              "dia_cobranca":  8
-                                                                          },
-                                                                          {
-                                                                              "servico":  "paramount plus",
-                                                                              "valor_mensal":  38.51,
-                                                                              "dia_cobranca":  5
-                                                                          }
-                                                                      ],
-                                                         "servico_mantido_no_calculo":  "globoplay",
-                                                         "economia_mensal":  72.95
-                                                     },
-                                        "formatado":  {
-                                                          "valor":  "R$ 72,95",
-                                                          "impacto":  "libera R$ 38,51 até o salário"
-                                                      }
-                                    }
-                                ]
-                },
-    "recorrencias":  {
-                         "id_usuario":  "d6c59567-bb6d-4a01-a0bd-f9b6f811724b",
-                         "renda_mensal":  7383.22,
-                         "itens":  [
-                                       {
-                                           "chave":  "Recebimentos diversos",
-                                           "tipo":  "entrada",
-                                           "tipo_item":  "entrada_recorrente",
-                                           "descricao":  "pix transf receb",
-                                           "dia_tipico":  7,
-                                           "valor_mensal":  2195.95,
-                                           "grupo_assinatura":  null,
-                                           "parcelas_restantes":  null
-                                       },
-                                       {
-                                           "chave":  "Salario CLT",
-                                           "tipo":  "entrada",
-                                           "tipo_item":  "salario",
-                                           "descricao":  "cred salario clt",
-                                           "dia_tipico":  7,
-                                           "valor_mensal":  5187.27,
-                                           "grupo_assinatura":  null,
-                                           "parcelas_restantes":  null
-                                       },
-                                       {
-                                           "chave":  "paramount plus",
-                                           "tipo":  "saida",
-                                           "tipo_item":  "assinatura",
-                                           "descricao":  "assin paramount plus",
-                                           "dia_tipico":  5,
-                                           "valor_mensal":  38.51,
-                                           "grupo_assinatura":  "video",
-                                           "parcelas_restantes":  null
-                                       },
-                                       {
-                                           "chave":  "globoplay",
-                                           "tipo":  "saida",
-                                           "tipo_item":  "assinatura",
-                                           "descricao":  "assin globoplay",
-                                           "dia_tipico":  11,
-                                           "valor_mensal":  34.6,
-                                           "grupo_assinatura":  "video",
-                                           "parcelas_restantes":  null
-                                       },
-                                       {
-                                           "chave":  "hbo max",
-                                           "tipo":  "saida",
-                                           "tipo_item":  "assinatura",
-                                           "descricao":  "assin hbo max",
-                                           "dia_tipico":  8,
-                                           "valor_mensal":  34.44,
-                                           "grupo_assinatura":  "video",
-                                           "parcelas_restantes":  null
-                                       },
-                                       {
-                                           "chave":  "Seguro de automovel",
-                                           "tipo":  "saida",
-                                           "tipo_item":  "conta_fixa",
-                                           "descricao":  "pag bol seg carro",
-                                           "dia_tipico":  26,
-                                           "valor_mensal":  1294.67,
-                                           "grupo_assinatura":  null,
-                                           "parcelas_restantes":  null
-                                       },
-                                       {
-                                           "chave":  "Outras transferencias",
-                                           "tipo":  "saida",
-                                           "tipo_item":  "conta_fixa",
-                                           "descricao":  "pix transf terc",
-                                           "dia_tipico":  6,
-                                           "valor_mensal":  962.77,
-                                           "grupo_assinatura":  null,
-                                           "parcelas_restantes":  null
-                                       },
-                                       {
-                                           "chave":  "Mensalidade escolar",
-                                           "tipo":  "saida",
-                                           "tipo_item":  "conta_fixa",
-                                           "descricao":  "pag bol mensal esc",
-                                           "dia_tipico":  9,
-                                           "valor_mensal":  654.74,
-                                           "grupo_assinatura":  null,
-                                           "parcelas_restantes":  null
-                                       },
-                                       {
-                                           "chave":  "Agua e esgoto",
-                                           "tipo":  "saida",
-                                           "tipo_item":  "conta_fixa",
-                                           "descricao":  "da agua esg",
-                                           "dia_tipico":  12,
-                                           "valor_mensal":  152.46,
-                                           "grupo_assinatura":  null,
-                                           "parcelas_restantes":  null
-                                       },
-                                       {
-                                           "chave":  "Energia eletrica",
-                                           "tipo":  "saida",
-                                           "tipo_item":  "conta_fixa",
-                                           "descricao":  "pix energ",
-                                           "dia_tipico":  11,
-                                           "valor_mensal":  138.1,
-                                           "grupo_assinatura":  null,
-                                           "parcelas_restantes":  null
-                                       },
-                                       {
-                                           "chave":  "TV Internet celular e telefone",
-                                           "tipo":  "saida",
-                                           "tipo_item":  "conta_fixa",
-                                           "descricao":  "da tv cabo",
-                                           "dia_tipico":  16,
-                                           "valor_mensal":  88.04,
-                                           "grupo_assinatura":  null,
-                                           "parcelas_restantes":  null
-                                       },
-                                       {
-                                           "chave":  "Gas",
-                                           "tipo":  "saida",
-                                           "tipo_item":  "conta_fixa",
-                                           "descricao":  "pag gas encan",
-                                           "dia_tipico":  13,
-                                           "valor_mensal":  72.99,
-                                           "grupo_assinatura":  null,
-                                           "parcelas_restantes":  null
-                                       },
-                                       {
-                                           "chave":  "Seguros",
-                                           "tipo":  "saida",
-                                           "tipo_item":  "conta_fixa",
-                                           "descricao":  "debito conta seg vida",
-                                           "dia_tipico":  26,
-                                           "valor_mensal":  68.94,
-                                           "grupo_assinatura":  null,
-                                           "parcelas_restantes":  null
-                                       },
-                                       {
-                                           "chave":  "Seguro residencial",
-                                           "tipo":  "saida",
-                                           "tipo_item":  "conta_fixa",
-                                           "descricao":  "seg resid",
-                                           "dia_tipico":  23,
-                                           "valor_mensal":  36.26,
-                                           "grupo_assinatura":  null,
-                                           "parcelas_restantes":  null
-                                       },
-                                       {
-                                           "chave":  "Anuidade e pacote de servico",
-                                           "tipo":  "saida",
-                                           "tipo_item":  "conta_fixa",
-                                           "descricao":  "debito conta tar pacote",
-                                           "dia_tipico":  20,
-                                           "valor_mensal":  27.11,
-                                           "grupo_assinatura":  null,
-                                           "parcelas_restantes":  null
-                                       },
-                                       {
-                                           "chave":  "Celular",
-                                           "tipo":  "saida",
-                                           "tipo_item":  "conta_fixa",
-                                           "descricao":  "plano cel",
-                                           "dia_tipico":  18,
-                                           "valor_mensal":  22.6,
-                                           "grupo_assinatura":  null,
-                                           "parcelas_restantes":  null
-                                       },
-                                       {
-                                           "chave":  "Pagamento de fatura",
-                                           "tipo":  "saida",
-                                           "tipo_item":  "fatura",
-                                           "descricao":  "pag fat cart credito integral",
-                                           "dia_tipico":  15,
-                                           "valor_mensal":  611.93,
-                                           "grupo_assinatura":  null,
-                                           "parcelas_restantes":  null
-                                       },
-                                       {
-                                           "chave":  "Financiamento de imovel",
-                                           "tipo":  "saida",
-                                           "tipo_item":  "financiamento",
-                                           "descricao":  "pag tit parc imov",
-                                           "dia_tipico":  8,
-                                           "valor_mensal":  2492.7,
-                                           "grupo_assinatura":  null,
-                                           "parcelas_restantes":  null
-                                       },
-                                       {
-                                           "chave":  "Emprestimos",
-                                           "tipo":  "saida",
-                                           "tipo_item":  "financiamento",
-                                           "descricao":  "debito conta parc emprest",
-                                           "dia_tipico":  3,
-                                           "valor_mensal":  956.44,
-                                           "grupo_assinatura":  null,
-                                           "parcelas_restantes":  null
-                                       }
-                                   ]
-                     },
-    "simulacao_pix_exemplo":  {
-                                  "id_usuario":  "d6c59567-bb6d-4a01-a0bd-f9b6f811724b",
-                                  "fica_negativo":  true,
-                                  "dia_que_acaba_antes":  "2026-01-06",
-                                  "dia_que_acaba_depois":  "2026-01-03",
-                                  "saldo_minimo_depois":  -1183.22,
-                                  "juros_estimados_antes":  0.9,
-                                  "juros_estimados_depois":  1.74,
-                                  "juros_adicionais":  0.84,
-                                  "data_debito_na_conta":  "2025-12-16",
-                                  "data_sugerida":  "2026-01-07",
-                                  "data_sugerida_resolve":  false,
-                                  "parcelas":  1,
-                                  "valor_parcela":  null,
-                                  "contas_comprometidas":  [
-                                                               {
-                                                                   "data":  "2026-01-03",
-                                                                   "descricao":  "debito conta parc emprest",
-                                                                   "valor":  956.44,
-                                                                   "tipo_item":  "financiamento",
-                                                                   "formatado":  {
-                                                                                     "data":  "3 de janeiro",
-                                                                                     "valor":  "R$ 956,44"
-                                                                                 }
-                                                               },
-                                                               {
-                                                                   "data":  "2026-01-05",
-                                                                   "descricao":  "assin paramount plus",
-                                                                   "valor":  38.51,
-                                                                   "tipo_item":  "assinatura",
-                                                                   "formatado":  {
-                                                                                     "data":  "5 de janeiro",
-                                                                                     "valor":  "R$ 38,51"
-                                                                                 }
-                                                               },
-                                                               {
-                                                                   "data":  "2026-01-06",
-                                                                   "descricao":  "pix transf terc",
-                                                                   "valor":  962.77,
-                                                                   "tipo_item":  "conta_fixa",
-                                                                   "formatado":  {
-                                                                                     "data":  "6 de janeiro",
-                                                                                     "valor":  "R$ 962,77"
-                                                                                 }
-                                                               }
-                                                           ],
-                                  "formatado":  {
-                                                    "valor":  "R$ 300,00",
-                                                    "valor_parcela":  null,
-                                                    "dia_que_acaba_depois":  "3 de janeiro",
-                                                    "juros_adicionais":  "R$ 0,84",
-                                                    "data_sugerida":  "7 de janeiro"
-                                                }
-                              }
+  "fonte": "data_manager_itau (data_referencia 2025-12-15), copiado em 2026-09-27",
+  "id_usuario": "5865ce27-0681-4dcc-9475-3df9d15a6858",
+  "status": {
+    "id_usuario": "5865ce27-0681-4dcc-9475-3df9d15a6858",
+    "data_referencia": "2025-12-15",
+    "estado": "zero_a_zero",
+    "saldo_hoje": 2794.3,
+    "renda_mensal": 8058.12,
+    "proximo_salario_data": "2026-01-07",
+    "proximo_salario_valor": 5366.81,
+    "dias_ate_salario": 23,
+    "saldo_projetado_vespera_salario": 107.45,
+    "saldo_minimo_projetado": 107.45,
+    "data_saldo_minimo": "2026-01-06",
+    "dia_que_acaba": null,
+    "compromissos_ate_salario": 2096.15,
+    "disponivel_ate_salario": 698.15,
+    "sobra_por_dia": 31.73,
+    "reserva_sugerida": 100,
+    "score_alerta": 2,
+    "sinais": [
+      "dias_no_negativo",
+      "emprestimo"
+    ],
+    "antecipar_aviso": false,
+    "juros_estimados": 0,
+    "encaminhar_atendimento": false,
+    "formatado": {
+      "saldo_hoje": "R$ 2.794,30",
+      "sobra_ate_salario": "R$ 698,15",
+      "sobra_por_dia": "R$ 31,73",
+      "proximo_salario": "7 de janeiro",
+      "dia_que_acaba": null,
+      "saldo_vespera_salario": "R$ 107,45",
+      "juros_estimados": "R$ 0,00",
+      "reserva_sugerida": "R$ 100,00"
+    }
+  },
+  "compromissos": {
+    "id_usuario": "5865ce27-0681-4dcc-9475-3df9d15a6858",
+    "ate": "2026-01-06",
+    "proximo_salario_data": "2026-01-07",
+    "total_saidas": 2096.15,
+    "total_entradas": 0,
+    "compromissos": [
+      {
+        "data": "2025-12-17",
+        "descricao": "pix qrs distrib gas",
+        "valor": -80.47,
+        "tipo_item": "conta_fixa",
+        "reagendavel": false,
+        "formatado": {
+          "valor": "R$ 80,47",
+          "data": "17 de dezembro"
+        }
+      },
+      {
+        "data": "2025-12-19",
+        "descricao": "pix qrs claro",
+        "valor": -105.06,
+        "tipo_item": "conta_fixa",
+        "reagendavel": false,
+        "formatado": {
+          "valor": "R$ 105,06",
+          "data": "19 de dezembro"
+        }
+      },
+      {
+        "data": "2025-12-22",
+        "descricao": "mensal cel",
+        "valor": -59.76,
+        "tipo_item": "conta_fixa",
+        "reagendavel": false,
+        "formatado": {
+          "valor": "R$ 59,76",
+          "data": "22 de dezembro"
+        }
+      },
+      {
+        "data": "2025-12-25",
+        "descricao": "debito conta tar pacote",
+        "valor": -34.64,
+        "tipo_item": "conta_fixa",
+        "reagendavel": false,
+        "formatado": {
+          "valor": "R$ 34,64",
+          "data": "25 de dezembro"
+        }
+      },
+      {
+        "data": "2025-12-28",
+        "descricao": "pag bol seg carro",
+        "valor": -998.53,
+        "tipo_item": "conta_fixa",
+        "reagendavel": false,
+        "formatado": {
+          "valor": "R$ 998,53",
+          "data": "28 de dezembro"
+        }
+      },
+      {
+        "data": "2025-12-28",
+        "descricao": "pag bol cond",
+        "valor": -585.45,
+        "tipo_item": "conta_fixa",
+        "reagendavel": false,
+        "formatado": {
+          "valor": "R$ 585,45",
+          "data": "28 de dezembro"
+        }
+      },
+      {
+        "data": "2025-12-29",
+        "descricao": "pix transf terc",
+        "valor": -191.36,
+        "tipo_item": "conta_fixa",
+        "reagendavel": true,
+        "formatado": {
+          "valor": "R$ 191,36",
+          "data": "29 de dezembro"
+        }
+      },
+      {
+        "data": "2026-01-05",
+        "descricao": "assin globoplay",
+        "valor": -40.88,
+        "tipo_item": "assinatura",
+        "reagendavel": false,
+        "formatado": {
+          "valor": "R$ 40,88",
+          "data": "5 de janeiro"
+        }
+      }
+    ]
+  },
+  "projecao": {
+    "id_usuario": "5865ce27-0681-4dcc-9475-3df9d15a6858",
+    "data_referencia": "2025-12-15",
+    "saldo_inicial": 2794.3,
+    "fim": "2026-01-06",
+    "saida_variavel_diaria": 26.85,
+    "saldo_final": 107.45,
+    "saldo_minimo": 107.45,
+    "dia_que_acaba": null,
+    "pontos": [
+      {
+        "data": "2025-12-16",
+        "saldo": 2767.45,
+        "eventos": []
+      },
+      {
+        "data": "2025-12-17",
+        "saldo": 2660.13,
+        "eventos": [
+          {
+            "data": "2025-12-17",
+            "descricao": "pix qrs distrib gas",
+            "valor": -80.47,
+            "tipo_item": "conta_fixa"
+          }
+        ]
+      },
+      {
+        "data": "2025-12-18",
+        "saldo": 2633.28,
+        "eventos": []
+      },
+      {
+        "data": "2025-12-19",
+        "saldo": 2501.37,
+        "eventos": [
+          {
+            "data": "2025-12-19",
+            "descricao": "pix qrs claro",
+            "valor": -105.06,
+            "tipo_item": "conta_fixa"
+          }
+        ]
+      },
+      {
+        "data": "2025-12-20",
+        "saldo": 2474.52,
+        "eventos": []
+      },
+      {
+        "data": "2025-12-21",
+        "saldo": 2447.67,
+        "eventos": []
+      },
+      {
+        "data": "2025-12-22",
+        "saldo": 2361.06,
+        "eventos": [
+          {
+            "data": "2025-12-22",
+            "descricao": "mensal cel",
+            "valor": -59.76,
+            "tipo_item": "conta_fixa"
+          }
+        ]
+      },
+      {
+        "data": "2025-12-23",
+        "saldo": 2334.21,
+        "eventos": []
+      },
+      {
+        "data": "2025-12-24",
+        "saldo": 2307.36,
+        "eventos": []
+      },
+      {
+        "data": "2025-12-25",
+        "saldo": 2245.87,
+        "eventos": [
+          {
+            "data": "2025-12-25",
+            "descricao": "debito conta tar pacote",
+            "valor": -34.64,
+            "tipo_item": "conta_fixa"
+          }
+        ]
+      },
+      {
+        "data": "2025-12-26",
+        "saldo": 2219.02,
+        "eventos": []
+      },
+      {
+        "data": "2025-12-27",
+        "saldo": 2192.17,
+        "eventos": []
+      },
+      {
+        "data": "2025-12-28",
+        "saldo": 581.34,
+        "eventos": [
+          {
+            "data": "2025-12-28",
+            "descricao": "pag bol seg carro",
+            "valor": -998.53,
+            "tipo_item": "conta_fixa"
+          },
+          {
+            "data": "2025-12-28",
+            "descricao": "pag bol cond",
+            "valor": -585.45,
+            "tipo_item": "conta_fixa"
+          }
+        ]
+      },
+      {
+        "data": "2025-12-29",
+        "saldo": 363.13,
+        "eventos": [
+          {
+            "data": "2025-12-29",
+            "descricao": "pix transf terc",
+            "valor": -191.36,
+            "tipo_item": "conta_fixa"
+          }
+        ]
+      },
+      {
+        "data": "2025-12-30",
+        "saldo": 336.28,
+        "eventos": []
+      },
+      {
+        "data": "2025-12-31",
+        "saldo": 309.43,
+        "eventos": []
+      },
+      {
+        "data": "2026-01-01",
+        "saldo": 282.58,
+        "eventos": []
+      },
+      {
+        "data": "2026-01-02",
+        "saldo": 255.73,
+        "eventos": []
+      },
+      {
+        "data": "2026-01-03",
+        "saldo": 228.88,
+        "eventos": []
+      },
+      {
+        "data": "2026-01-04",
+        "saldo": 202.03,
+        "eventos": []
+      },
+      {
+        "data": "2026-01-05",
+        "saldo": 134.3,
+        "eventos": [
+          {
+            "data": "2026-01-05",
+            "descricao": "assin globoplay",
+            "valor": -40.88,
+            "tipo_item": "assinatura"
+          }
+        ]
+      },
+      {
+        "data": "2026-01-06",
+        "saldo": 107.45,
+        "eventos": []
+      }
+    ]
+  },
+  "ajustes": {
+    "id_usuario": "5865ce27-0681-4dcc-9475-3df9d15a6858",
+    "estado": "zero_a_zero",
+    "encaminhar_atendimento": false,
+    "ajustes": [
+      {
+        "ajuste_id": "mudanca_data:Outras transferencias",
+        "tipo": "mudanca_data",
+        "titulo": "Agendar pix transf terc para 07/01, dia do salário",
+        "valor": 191.36,
+        "impacto_dias": 0,
+        "resolve": true,
+        "ganho_vespera_salario": 191.36,
+        "esforco": 1,
+        "acao": "agendar_pix",
+        "detalhes": {
+          "categoria": "Outras transferencias",
+          "datas_previstas": [
+            "2025-12-29"
+          ],
+          "data_sugerida": "2026-01-07"
+        },
+        "formatado": {
+          "valor": "R$ 191,36",
+          "impacto": "libera R$ 191,36 até o salário"
+        }
+      },
+      {
+        "ajuste_id": "assinatura_redundante:video",
+        "tipo": "assinatura_redundante",
+        "titulo": "3 serviços de vídeo: paramount plus, disney plus, globoplay",
+        "valor": 82.16,
+        "impacto_dias": 0,
+        "resolve": true,
+        "ganho_vespera_salario": 40.88,
+        "esforco": 2,
+        "acao": null,
+        "detalhes": {
+          "grupo": "video",
+          "servicos": [
+            {
+              "servico": "paramount plus",
+              "valor_mensal": 25.91,
+              "dia_cobranca": 11
+            },
+            {
+              "servico": "disney plus",
+              "valor_mensal": 41.28,
+              "dia_cobranca": 8
+            },
+            {
+              "servico": "globoplay",
+              "valor_mensal": 40.88,
+              "dia_cobranca": 5
+            }
+          ],
+          "servico_mantido_no_calculo": "paramount plus",
+          "economia_mensal": 82.16
+        },
+        "formatado": {
+          "valor": "R$ 82,16",
+          "impacto": "libera R$ 40,88 até o salário"
+        }
+      },
+      {
+        "ajuste_id": "gasto_discricionario:Viagens",
+        "tipo": "gasto_discricionario",
+        "titulo": "Teto de R$ 389.36 em Viagens neste mês",
+        "valor": 241.24,
+        "impacto_dias": 0,
+        "resolve": true,
+        "ganho_vespera_salario": 0,
+        "esforco": 3,
+        "acao": "lembrete_teto",
+        "detalhes": {
+          "categoria": "Viagens",
+          "gasto_mes_atual": 414.56,
+          "esperado_ate_hoje": 188.4,
+          "media_mensal_3m": 389.36,
+          "teto_sugerido": 389.36,
+          "efeito_na_fatura_de": null
+        },
+        "formatado": {
+          "valor": "R$ 241,24",
+          "impacto": null
+        }
+      },
+      {
+        "ajuste_id": "gasto_discricionario:Lojas e sites",
+        "tipo": "gasto_discricionario",
+        "titulo": "Teto de R$ 41.47 em Lojas e sites neste mês",
+        "valor": 229.88,
+        "impacto_dias": 0,
+        "resolve": true,
+        "ganho_vespera_salario": 0,
+        "esforco": 3,
+        "acao": "lembrete_teto",
+        "detalhes": {
+          "categoria": "Lojas e sites",
+          "gasto_mes_atual": 235.58,
+          "esperado_ate_hoje": 20.07,
+          "media_mensal_3m": 41.47,
+          "teto_sugerido": 41.47,
+          "efeito_na_fatura_de": null
+        },
+        "formatado": {
+          "valor": "R$ 229,88",
+          "impacto": null
+        }
+      }
+    ]
+  },
+  "recorrencias": {
+    "id_usuario": "5865ce27-0681-4dcc-9475-3df9d15a6858",
+    "renda_mensal": 8058.12,
+    "itens": [
+      {
+        "chave": "Recebimentos diversos",
+        "tipo": "entrada",
+        "tipo_item": "entrada_recorrente",
+        "descricao": "pix transf receb",
+        "dia_tipico": 8,
+        "valor_mensal": 2691.31,
+        "grupo_assinatura": null,
+        "parcelas_restantes": null
+      },
+      {
+        "chave": "Salario CLT",
+        "tipo": "entrada",
+        "tipo_item": "salario",
+        "descricao": "cred salario empresa",
+        "dia_tipico": 7,
+        "valor_mensal": 5366.81,
+        "grupo_assinatura": null,
+        "parcelas_restantes": null
+      },
+      {
+        "chave": "disney plus",
+        "tipo": "saida",
+        "tipo_item": "assinatura",
+        "descricao": "assin disney plus",
+        "dia_tipico": 8,
+        "valor_mensal": 41.28,
+        "grupo_assinatura": "video",
+        "parcelas_restantes": null
+      },
+      {
+        "chave": "globoplay",
+        "tipo": "saida",
+        "tipo_item": "assinatura",
+        "descricao": "assin globoplay",
+        "dia_tipico": 5,
+        "valor_mensal": 40.88,
+        "grupo_assinatura": "video",
+        "parcelas_restantes": null
+      },
+      {
+        "chave": "paramount plus",
+        "tipo": "saida",
+        "tipo_item": "assinatura",
+        "descricao": "assin paramount plus",
+        "dia_tipico": 11,
+        "valor_mensal": 25.91,
+        "grupo_assinatura": "video",
+        "parcelas_restantes": null
+      },
+      {
+        "chave": "Seguro de automovel",
+        "tipo": "saida",
+        "tipo_item": "conta_fixa",
+        "descricao": "pag bol seg carro",
+        "dia_tipico": 28,
+        "valor_mensal": 998.53,
+        "grupo_assinatura": null,
+        "parcelas_restantes": null
+      },
+      {
+        "chave": "Mensalidade escolar",
+        "tipo": "saida",
+        "tipo_item": "conta_fixa",
+        "descricao": "pag bol mensal esc",
+        "dia_tipico": 10,
+        "valor_mensal": 731.88,
+        "grupo_assinatura": null,
+        "parcelas_restantes": null
+      },
+      {
+        "chave": "Condominio",
+        "tipo": "saida",
+        "tipo_item": "conta_fixa",
+        "descricao": "pag bol cond",
+        "dia_tipico": 28,
+        "valor_mensal": 585.45,
+        "grupo_assinatura": null,
+        "parcelas_restantes": null
+      },
+      {
+        "chave": "Energia eletrica",
+        "tipo": "saida",
+        "tipo_item": "conta_fixa",
+        "descricao": "pag energ elet",
+        "dia_tipico": 12,
+        "valor_mensal": 210.26,
+        "grupo_assinatura": null,
+        "parcelas_restantes": null
+      },
+      {
+        "chave": "Outras transferencias",
+        "tipo": "saida",
+        "tipo_item": "conta_fixa",
+        "descricao": "pix transf terc",
+        "dia_tipico": 29,
+        "valor_mensal": 191.36,
+        "grupo_assinatura": null,
+        "parcelas_restantes": null
+      },
+      {
+        "chave": "TV Internet celular e telefone",
+        "tipo": "saida",
+        "tipo_item": "conta_fixa",
+        "descricao": "pix qrs claro",
+        "dia_tipico": 19,
+        "valor_mensal": 105.06,
+        "grupo_assinatura": null,
+        "parcelas_restantes": null
+      },
+      {
+        "chave": "Gas",
+        "tipo": "saida",
+        "tipo_item": "conta_fixa",
+        "descricao": "pix qrs distrib gas",
+        "dia_tipico": 17,
+        "valor_mensal": 80.47,
+        "grupo_assinatura": null,
+        "parcelas_restantes": null
+      },
+      {
+        "chave": "Agua e esgoto",
+        "tipo": "saida",
+        "tipo_item": "conta_fixa",
+        "descricao": "deb agua",
+        "dia_tipico": 15,
+        "valor_mensal": 76.69,
+        "grupo_assinatura": null,
+        "parcelas_restantes": null
+      },
+      {
+        "chave": "Celular",
+        "tipo": "saida",
+        "tipo_item": "conta_fixa",
+        "descricao": "mensal cel",
+        "dia_tipico": 22,
+        "valor_mensal": 59.76,
+        "grupo_assinatura": null,
+        "parcelas_restantes": null
+      },
+      {
+        "chave": "Anuidade e pacote de servico",
+        "tipo": "saida",
+        "tipo_item": "conta_fixa",
+        "descricao": "debito conta tar pacote",
+        "dia_tipico": 25,
+        "valor_mensal": 34.64,
+        "grupo_assinatura": null,
+        "parcelas_restantes": null
+      },
+      {
+        "chave": "Pagamento de fatura",
+        "tipo": "saida",
+        "tipo_item": "fatura",
+        "descricao": "pag fat cart credito integral",
+        "dia_tipico": 15,
+        "valor_mensal": 805.47,
+        "grupo_assinatura": null,
+        "parcelas_restantes": null
+      },
+      {
+        "chave": "Financiamento de imovel",
+        "tipo": "saida",
+        "tipo_item": "financiamento",
+        "descricao": "pag tit parc imov",
+        "dia_tipico": 8,
+        "valor_mensal": 3335.12,
+        "grupo_assinatura": null,
+        "parcelas_restantes": null
+      }
+    ]
+  },
+  "gastos": {
+    "id_usuario": "5865ce27-0681-4dcc-9475-3df9d15a6858",
+    "meses_media": 3,
+    "categorias": [
+      {
+        "macro": "Emprestimos e financiamentos",
+        "gasto_mes_atual": 3392.48,
+        "media_mensal": 3744.28,
+        "via_fatura": false
+      },
+      {
+        "macro": "Produtos financeiros",
+        "gasto_mes_atual": 2930.5,
+        "media_mensal": 1450.26,
+        "via_fatura": false
+      },
+      {
+        "macro": "Casa",
+        "gasto_mes_atual": 287.99,
+        "media_mensal": 1117.69,
+        "via_fatura": false
+      },
+      {
+        "macro": "Veiculos",
+        "gasto_mes_atual": 12.6,
+        "media_mensal": 1013.68,
+        "via_fatura": true
+      },
+      {
+        "macro": "Educacao",
+        "gasto_mes_atual": 733.86,
+        "media_mensal": 731.88,
+        "via_fatura": false
+      },
+      {
+        "macro": "Lazer",
+        "gasto_mes_atual": 0,
+        "media_mensal": 586.54,
+        "via_fatura": true
+      },
+      {
+        "macro": "Viagens",
+        "gasto_mes_atual": 414.56,
+        "media_mensal": 389.36,
+        "via_fatura": true
+      },
+      {
+        "macro": "Posto de combustivel",
+        "gasto_mes_atual": 58.67,
+        "media_mensal": 296.84,
+        "via_fatura": true
+      },
+      {
+        "macro": "Restaurantes",
+        "gasto_mes_atual": 31.13,
+        "media_mensal": 197.45,
+        "via_fatura": true
+      },
+      {
+        "macro": "Transferencias diversas",
+        "gasto_mes_atual": 0,
+        "media_mensal": 191.36,
+        "via_fatura": false
+      },
+      {
+        "macro": "Outros gastos",
+        "gasto_mes_atual": 0,
+        "media_mensal": 131.28,
+        "via_fatura": false
+      },
+      {
+        "macro": "Assinaturas",
+        "gasto_mes_atual": 111.69,
+        "media_mensal": 108.07,
+        "via_fatura": false
+      },
+      {
+        "macro": "Mercado",
+        "gasto_mes_atual": 52.04,
+        "media_mensal": 104.62,
+        "via_fatura": true
+      },
+      {
+        "macro": "Lojas e sites",
+        "gasto_mes_atual": 235.58,
+        "media_mensal": 41.47,
+        "via_fatura": true
+      }
+    ]
+  },
+  "historico_mensal": [
+    {
+      "mes": "2025-01",
+      "saldo_fim": 1017.19,
+      "saldo_minimo": 1017.19,
+      "dias_negativos": 0
+    },
+    {
+      "mes": "2025-02",
+      "saldo_fim": 687.38,
+      "saldo_minimo": 687.38,
+      "dias_negativos": 0
+    },
+    {
+      "mes": "2025-03",
+      "saldo_fim": 5764.45,
+      "saldo_minimo": 646.43,
+      "dias_negativos": 0
+    },
+    {
+      "mes": "2025-04",
+      "saldo_fim": 2885.49,
+      "saldo_minimo": 2885.49,
+      "dias_negativos": 0
+    },
+    {
+      "mes": "2025-05",
+      "saldo_fim": 2004.84,
+      "saldo_minimo": 2004.84,
+      "dias_negativos": 0
+    },
+    {
+      "mes": "2025-06",
+      "saldo_fim": 1302.67,
+      "saldo_minimo": 1302.67,
+      "dias_negativos": 0
+    },
+    {
+      "mes": "2025-07",
+      "saldo_fim": 210.85,
+      "saldo_minimo": 210.85,
+      "dias_negativos": 0
+    },
+    {
+      "mes": "2025-08",
+      "saldo_fim": 678.89,
+      "saldo_minimo": -264.94,
+      "dias_negativos": 5
+    },
+    {
+      "mes": "2025-09",
+      "saldo_fim": 405.56,
+      "saldo_minimo": 405.56,
+      "dias_negativos": 0
+    },
+    {
+      "mes": "2025-10",
+      "saldo_fim": -967.75,
+      "saldo_minimo": -967.75,
+      "dias_negativos": 4
+    },
+    {
+      "mes": "2025-11",
+      "saldo_fim": 2107.34,
+      "saldo_minimo": -1005.79,
+      "dias_negativos": 6
+    },
+    {
+      "mes": "2025-12",
+      "saldo_fim": 2794.3,
+      "saldo_minimo": 2107.34,
+      "dias_negativos": 0
+    }
+  ]
 }

@@ -60,6 +60,35 @@ Registro das decisões tomadas ao publicar o front end no Cloud Run. Código em 
   card "Avisar quem recebe" abre o compartilhamento do celular (`navigator.share`).
 - Cards fora do caminho da demo mostram o aviso do protótipo e registram `path_not_in_demo`.
 
+## Cliente da demo: "Renata Lopes" (nome fictício, dados reais)
+
+Perfil pedido: renda recorrente, fica no negativo em alguns meses (não todos), a renda cobre as despesas médias
+mas sem margem para imprevistos. Consulta em [perfil_segmento.sql](perfil_segmento.sql) (12 meses de 2025,
+tabelas `data_manager.recorrencias`, `perfil_mensal` e `stg_extrato`):
+
+| Métrica | Perfil (98 clientes) | Nunca negativa (628) |
+|---|---|---|
+| Saldo disponível após despesas fixas (% da renda) | **38,9%** (mediana 33,4%) | 44,5% |
+| Cartão + lazer + delivery + compras (% da renda) | **28,6%** | 16,6% → **+72%** |
+| Mesmo gasto em R$/mês | R$ 1.569,52 | R$ 1.281,73 → +22,5% |
+
+Definições: renda recorrente = salário ou benefício em `recorrencias`; "alguns meses" = 1 a 11 meses com
+saldo de fim de mês < 0; "renda cobre" = fluxo médio da conta ≥ 0; fixas = conta_fixa + financiamento + parcela +
+assinatura; gasto-alvo = consumo no cartão + Lazer/Delivery/Lojas e sites em qualquer canal.
+
+Escolhida com [candidatos_segmento.sql](candidatos_segmento.sql): `5865ce27-0681-4dcc-9475-3df9d15a6858`,
+estado `zero_a_zero` (fecha o ciclo com R$ 107,45), renda R$ 8.058,12, fixas 80,9%, ficou no negativo em
+ago, out e nov/25; ajustes que resolvem (reagendar Pix de R$ 191,36, streaming, tetos).
+
+- `GET /api/cliente` monta o perfil (fixas por grupo, tetos, histórico) a partir do data_manager; o front lê via
+  `src/features/cliente/ClienteContext.tsx`. O prompt do Gemini é montado com o mesmo perfil.
+- Tetos: fixas como estão; 25% da sobra como reserva para imprevistos; transporte na média real; resto para
+  lazer/delivery/compras.
+- Jornada do salário adaptada a projeção positiva sem margem ("só R$ 107,45 de folga"; 2ª alternativa = teto em
+  uma categoria acima da média, em vez de "usar o limite").
+- Pendência: no simulador (`studio/WizardScreen.tsx`, passo 4, card "Essenciais Fixos") o percentual ainda é o
+  texto fixo "36,2%"; a edição automática foi bloqueada pelo classificador de segurança da ferramenta.
+
 ## Pendências / ideias
 
 - O áudio gravado só existe na sessão do navegador (não é salvo).

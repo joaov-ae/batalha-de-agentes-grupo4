@@ -46,6 +46,7 @@ import {
   signed,
 } from './PlanoSalario';
 import { FinancialGoal, ScreenType, CategoryCap } from '../studio/studioTypes';
+import { useCliente } from '../cliente/ClienteContext';
 import { DEFAULT_INVESTMENT_OPTIONS } from '../studio/studioConstants';
 import confetti from 'canvas-confetti';
 
@@ -127,13 +128,6 @@ const formatRich = (s: string) =>
     .replace(/\[\[pos:(.*?)\]\]/g, '<b class="text-[#1E8E3E]">$1</b>')
     .replace(/\[\[neg:(.*?)\]\]/g, '<b class="text-[#C62828]">$1</b>');
 
-// Tetos sugeridos para o salário de R$ 10.000 (jornada de controle de gastos por categoria, do Studio)
-const SUGGESTED_CATEGORY_CAPS: CategoryCap[] = [
-  { category: 'Essenciais Fixos', amount: 3620, percentage: 36.2, description: 'Moradia, água, luz, internet e seguros', color: '#002244' },
-  { category: 'Lazer Sem Culpa', amount: 3100, percentage: 31.0, description: 'Restaurantes, cultura e passeios', color: '#EC7000' },
-  { category: 'Transporte & Apps', amount: 600, percentage: 6.0, description: 'Uber, 99 e combustível com alerta de 85%', color: '#0047BA' },
-  { category: 'Investimento Futuro', amount: 2000, percentage: 20.0, description: 'CDB Personnalité 100% CDI Liquidez Diária', color: '#059669' },
-];
 
 // Jornada "+ Nova Missão": respostas sugeridas em cada passo
 const GOAL_FLOW_CHIPS: Record<1 | 2 | 3, string[]> = {
@@ -273,6 +267,9 @@ export const IaiChatScreen: React.FC<IaiChatScreenProps> = ({
   className = '',
   skipIntro = false,
 }) => {
+  // Cliente exibida (nome fictício, números reais do extrato)
+  const cliente = useCliente();
+
   // Opening preparation stages: 'preparing' -> 'ready' -> 'chat'
   const [openingPhase, setOpeningPhase] = useState<'preparing' | 'ready' | 'chat'>(
     skipIntro || isGoalCreationFlow || salaryPlanMode ? 'chat' : 'preparing'
@@ -347,7 +344,7 @@ export const IaiChatScreen: React.FC<IaiChatScreenProps> = ({
         {
           id: `iai-${Date.now()}`,
           sender: 'iai',
-          text: 'Desculpe, Maria, não consegui entender o seu áudio. Pode gravar de novo, um pouco mais perto do microfone, ou digitar o que precisa?',
+          text: `Desculpe, ${cliente.primeiroNome}, não consegui entender o seu áudio. Pode gravar de novo, um pouco mais perto do microfone, ou digitar o que precisa?`,
           timestamp: nowTime(),
         },
       ]);
@@ -382,7 +379,7 @@ export const IaiChatScreen: React.FC<IaiChatScreenProps> = ({
     if (!salaryPlanMode) return;
     logEvento('fab_opened', 'trigger=salary_received');
     setMessages([
-      { id: 'plan-hello', sender: 'iai', text: '**ia.i**, Maria! Seu salário caiu.', timestamp: nowTime() },
+      { id: 'plan-hello', sender: 'iai', text: `**ia.i**, ${cliente.primeiroNome}! Seu salário caiu.`, timestamp: nowTime() },
       {
         id: 'plan-hello-2',
         sender: 'iai',
@@ -619,6 +616,14 @@ export const IaiChatScreen: React.FC<IaiChatScreenProps> = ({
       // Allow user to see conversational loading steps sequentially
       await new Promise((resolve) => setTimeout(resolve, 3800));
 
+      // Respostas prontas montadas com os números reais da cliente (perfil de /api/cliente)
+      const R = cliente;
+      const tetoDe = (prefixo: string) => R.tetos.find((t) => t.categoria.startsWith(prefixo));
+      const tetoEstilo = tetoDe('Lazer');
+      const tetoTransp = tetoDe('Transporte');
+      const tetoReserva = tetoDe('Reserva');
+      const pctTxt = (v: number) => `${v.toFixed(1).replace('.', ',')}%`;
+
       // Jornada do Studio: controle de gastos por categoria, com tetos em dinheiro e porcentagem
       if (isCategoryCapsRequest(text)) {
         setMessages((prev) => [
@@ -627,15 +632,18 @@ export const IaiChatScreen: React.FC<IaiChatScreenProps> = ({
             id: `iai-${Date.now()}`,
             sender: 'iai',
             text:
-              `Maria, analisei seu extrato recente e sua renda líquida mensal de **R$ 10.000,00**.\n\n` +
-              `Sugiro um **controle de gastos por categoria** com tetos máximos (em dinheiro e percentual) para equilibrar suas despesas com tranquilidade:\n\n` +
-              `• **Essenciais Fixos:** R$ 3.620,00 (**36,2%**), bem abaixo da média de 50%.\n` +
-              `• **Lazer Sem Culpa:** até R$ 3.100,00 (**31,0%**) para restaurantes, viagens e passeios.\n` +
-              `• **Transporte & Mobilidade:** até R$ 600,00 (**6,0%**), com aviso ao atingir 85% do teto.\n` +
-              `• **Investimento no Futuro:** R$ 2.000,00 (**20,0%**) no CDB 100% CDI com liquidez diária.\n\n` +
-              `Você pode parametrizar e ajustar cada um desses valores:`,
+              `${R.primeiroNome}, analisei seu extrato recente e sua renda mensal de **${formatBRL(R.renda.mensal)}**.\n\n` +
+              `Sugiro um **controle de gastos por categoria** com tetos máximos (em dinheiro e percentual), para sobrar uma margem para imprevistos:\n\n` +
+              R.tetos.map((t) => `• **${t.categoria}:** ${formatBRL(t.valor)} (**${pctTxt(t.percentual)}**). ${t.descricao}.`).join('\n') +
+              `\n\nVocê pode parametrizar e ajustar cada um desses valores:`,
             timestamp: nowTime(),
-            categoryCaps: SUGGESTED_CATEGORY_CAPS,
+            categoryCaps: R.tetos.map((t) => ({
+              category: t.categoria,
+              amount: t.valor,
+              percentage: t.percentual,
+              description: t.descricao,
+              color: t.cor,
+            })),
           },
         ]);
         return;
@@ -643,18 +651,18 @@ export const IaiChatScreen: React.FC<IaiChatScreenProps> = ({
 
       // Prompt 1: Faça o Raio-X das minhas contas fixas.
       if (lowerText.includes('raio-x') || lowerText.includes('raio x') || lowerText.includes('contas fixas')) {
+        const diagnostico =
+          R.fixas.percentualRenda > 50
+            ? `💡 **Diagnóstico Ia.i:** suas despesas fixas usam **${pctTxt(R.fixas.percentualRenda)}** da renda, acima dos 50% recomendados. Sobram **${formatBRL(R.sobraAposFixas)}** para o resto do mês: a renda cobre as despesas, mas sem margem para imprevistos. Vale separar uma reserva logo no dia do salário.`
+            : `💡 **Diagnóstico Ia.i:** suas despesas fixas usam **${pctTxt(R.fixas.percentualRenda)}** da renda, dentro dos 50% recomendados. Sobram **${formatBRL(R.sobraAposFixas)}** para o resto do mês.`;
         const iaiMsg: ChatMessage = {
           id: `iai-${Date.now()}`,
           sender: 'iai',
-          text: `Com certeza, Maria! Preparei o Raio-X completo das suas contas fixas deste mês:
-
-• **Moradia e condomínio:** R$ 2.650,00 (26,5%)
-• **Energia elétrica e água:** R$ 340,00 (3,4%)
-• **Internet e telefonia:** R$ 180,00 (1,8%)
-• **Seguros (Cartão Protegido e Habitacional):** R$ 450,00 (4,5%)
-• **TOTAL DE CONTAS FIXAS:** R$ 3.620,00 (36,2% da sua renda líquida)
-
-💡 **Diagnóstico Ia.i:** Excelente! Suas despesas fixas estão bem abaixo do limite recomendado de 50%. Todas estão cadastradas no débito automático do Itaú, garantindo pontualidade e pontos no Minhas Vantagens!`,
+          text:
+            `Com certeza, ${R.primeiroNome}! Preparei o Raio-X das suas contas fixas deste mês:\n\n` +
+            R.fixas.grupos.map((g) => `• **${g.nome}:** ${formatBRL(g.valor)} (${pctTxt(g.percentual)})`).join('\n') +
+            `\n• **TOTAL DE CONTAS FIXAS:** ${formatBRL(R.fixas.total)} (${pctTxt(R.fixas.percentualRenda)} da sua renda)\n\n` +
+            diagnostico,
           timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
           quickAction: { type: 'view_wizard', label: 'Personalizar orçamento no simulador' },
         };
@@ -666,40 +674,22 @@ export const IaiChatScreen: React.FC<IaiChatScreenProps> = ({
       // Prompt 2: Quanto posso gastar com lazer sem culpa?
       // (perguntas de impacto vindas do extrato seguem para o Gemini)
       if ((lowerText.includes('lazer') || lowerText.includes('sem culpa')) && !lowerText.includes('impacto')) {
+        const teto = tetoEstilo?.valor ?? 0;
         const iaiMsg: ChatMessage = {
           id: `iai-${Date.now()}`,
           sender: 'iai',
-          text: `Maria, com o seu salário na conta e as contas fixas já cobertas, calculamos sua margem de tranquilidade:
-
-• **Teto recomendado para lazer e estilo de vida:** **R$ 2.000,00 no mês** (cerca de 20% do seu salário).
-• **Sugestão de distribuição semanal:** R$ 500,00 por semana para restaurantes, bares, passeios e compras pessoais.
-
-🔒 **Dica inteligente:** Ativei um aviso no seu Personnalité Black para te notificar quando você atingir 80% dessa meta. Assim você aproveita o mês com liberdade e zero culpa!`,
+          text:
+            `${R.primeiroNome}, com o salário na conta e as contas fixas cobertas, calculei sua margem de tranquilidade:\n\n` +
+            `• **Teto para lazer, delivery e compras:** **${formatBRL(teto)} no mês** (${pctTxt(tetoEstilo?.percentual ?? 0)} da renda).\n` +
+            `• **Por semana:** cerca de ${formatBRL(teto / 4.3)}.\n` +
+            `• **Hoje você gasta em média ${formatBRL(R.estiloDeVidaMedio)}/mês** nessas categorias.\n\n` +
+            `🔒 **Dica inteligente:** esse teto já deixa ${formatBRL(tetoReserva?.valor ?? 0)} livres para imprevistos. Posso te avisar quando você chegar a 80% dele.`,
           timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
           quickAction: {
             type: 'create_goal',
             label: 'Salvar como meta: Lazer sem culpa',
-            goal: { title: 'Lazer sem culpa', target: 2000, deadline: 'este mês' },
+            goal: { title: 'Lazer sem culpa', target: teto, deadline: 'este mês' },
           },
-        };
-
-        setMessages((prev) => [...prev, iaiMsg]);
-        return;
-      }
-
-      // Prompt 3: Programe a divisão do salário entre gastos essenciais e não essenciais.
-      if (lowerText.includes('divisão') || lowerText.includes('divisao') || lowerText.includes('essenciais') || lowerText.includes('não essenciais')) {
-        const iaiMsg: ChatMessage = {
-          id: `iai-${Date.now()}`,
-          sender: 'iai',
-          text: `Perfeito, Maria! Estruturei a programação do seu salário seguindo a regra 50-30-20 personalizada para a sua realidade:
-
-• **50% Gastos Essenciais (R$ 5.000,00):** Moradia, alimentação no supermercado, contas de consumo, saúde e transporte básico.
-• **30% Estilo de Vida e Lazer (R$ 3.000,00):** Restaurantes, delivery, compras pessoais, passeios e cuidados.
-• **20% Futuro e Reserva (R$ 2.000,00):** Aporte automático em CDB 100% CDI com liquidez diária e proteção FGC.
-
-Deseja que eu programe o investimento automático de R$ 2.000,00 no dia que o seu salário cair?`,
-          timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
         };
 
         setMessages((prev) => [...prev, iaiMsg]);
@@ -708,20 +698,20 @@ Deseja que eu programe o investimento automático de R$ 2.000,00 no dia que o se
 
       // Prompt 4: Definir meu teto de gastos de transporte do mês.
       if (lowerText.includes('transporte') || lowerText.includes('teto')) {
+        const teto = tetoTransp?.valor ?? 0;
         const iaiMsg: ChatMessage = {
           id: `iai-${Date.now()}`,
           sender: 'iai',
-          text: `Ótimo planejamento, Maria! Analisei seu histórico de mobilidade dos últimos 90 dias:
-
-• **Média histórica:** R$ 720,00/mês (combustível nos postos Ipiranga, Sem Parar e corridas por app).
-• **Teto sugerido para este mês:** **R$ 750,00**.
-
-Criei um controle inteligente de categoria ativo no app. Você receberá avisos em tempo real a cada abastecimento ou corrida no seu cartão Itaú!`,
+          text:
+            `Ótimo planejamento, ${R.primeiroNome}! Analisei seus gastos com mobilidade dos últimos 3 meses:\n\n` +
+            `• **Média histórica:** ${formatBRL(R.transporteMedio)}/mês (combustível e apps de transporte).\n` +
+            `• **Teto sugerido para este mês:** **${formatBRL(teto)}**.\n\n` +
+            `Com o controle ativo, você recebe um aviso ao chegar a 85% do teto.`,
           timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
           quickAction: {
             type: 'create_goal',
             label: 'Salvar teto de transporte como meta',
-            goal: { title: 'Teto de transporte', target: 750, deadline: 'este mês' },
+            goal: { title: 'Teto de transporte', target: teto, deadline: 'este mês' },
           },
         };
 
@@ -733,18 +723,15 @@ Criei um controle inteligente de categoria ativo no app. Você receberá avisos 
         const iaiMsg: ChatMessage = {
           id: `iai-${Date.now()}`,
           sender: 'iai',
-          text: `Seu perfil mostra que você tem uma rotina financeira bem estruturada e diversificada, Maria. Vou te contar um pouco sobre os principais pontos:
-
-• **Preferências de investimento:** Você demonstra interesse em investir em CDB e já declarou esse objetivo. Isso mostra que você busca segurança e rentabilidade estável para o seu dinheiro.
-
-• **Produtos e serviços:** Você tem dois cartões ativos, incluindo um Personnalité Black Mastercard, que oferece benefícios diferenciados. Além disso, você conta com um financiamento imobiliário vigente, o que indica planejamento de longo prazo.
-
-• **Seguros:** Seu perfil inclui seguros importantes, como o Cartão Protegido e o Habitacional, que ajudam a proteger seu patrimônio e suas transações.
-
-• **Benefícios disponíveis:** Você faz parte do programa Minhas Vantagens Nível 4 e tem vários benefícios ativos, como anuidade grátis, cashback, experiências em viagens, frete e descontos em parceiros.
-
-Se quiser saber mais sobre algum desses pontos ou programar seu mês, é só me contar o que precisa.`,
+          text:
+            `${R.primeiroNome}, olhando o seu extrato dos últimos ${R.historico.meses} meses:\n\n` +
+            `• **Renda recorrente:** ${formatBRL(R.renda.mensal)} por mês (salário de ${formatBRL(R.renda.salario)} + ${formatBRL(R.renda.outras)} de outras entradas).\n\n` +
+            `• **Despesas fixas:** ${formatBRL(R.fixas.total)} (${pctTxt(R.fixas.percentualRenda)} da renda). A maior é ${R.fixas.grupos[0]?.nome.toLowerCase() ?? 'moradia'} (${formatBRL(R.fixas.grupos[0]?.valor ?? 0)}).\n\n` +
+            `• **Folga:** sobram ${formatBRL(R.sobraAposFixas)} (${pctTxt(R.sobraAposFixasPct)}) depois das fixas, e você gasta em média ${formatBRL(R.estiloDeVidaMedio)}/mês com lazer, delivery e compras.\n\n` +
+            `• **Histórico:** a conta ficou no negativo em ${R.historico.mesesNoNegativo} desses meses (${R.historico.quais.join(', ')}). A renda cobre as despesas médias, mas um gasto fora do planejado já é suficiente para negativar.\n\n` +
+            `Quer que eu monte um plano para proteger essa folga?`,
           timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+          quickAction: { type: 'view_wizard', label: 'Montar plano no simulador' },
         };
 
         setMessages((prev) => [...prev, iaiMsg]);
@@ -766,7 +753,7 @@ Se quiser saber mais sobre algum desses pontos ou programar seu mês, é só me 
       const iaiMsg: ChatMessage = {
         id: `iai-${Date.now()}`,
         sender: 'iai',
-        text: data.text || 'Entendi, Maria. Posso te ajudar com detalhes sobre seus cartões Personnalité, CDB ou planejamento de gastos.',
+        text: data.text || `Entendi, ${cliente.primeiroNome}. Posso te ajudar com detalhes sobre seus cartões Personnalité, CDB ou planejamento de gastos.`,
         timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
       };
 
@@ -913,7 +900,9 @@ Se quiser saber mais sobre algum desses pontos ou programar seu mês, é só me 
       pushIai(
         d.projecao.saldoFinal < 0
           ? `Com isso e os seus gastos de costume, a previsão é fechar o mês com [[neg:${brl(Math.abs(d.projecao.saldoFinal))} no negativo]] e pagar juros do limite.`
-          : `Com isso e os seus gastos de costume, a previsão é fechar o mês com [[pos:${brl(d.projecao.saldoFinal)} sobrando]].`,
+          : d.semMargem
+            ? `Com isso e os seus gastos de costume, a previsão é fechar o mês com só [[neg:${brl(d.projecao.saldoFinal)} de folga]]. A renda cobre as despesas, mas um gasto fora do planejado já leva a conta ao negativo.`
+            : `Com isso e os seus gastos de costume, a previsão é fechar o mês com [[pos:${brl(d.projecao.saldoFinal)} sobrando]].`,
         { planBlock: 'grafico-neg' },
       );
       logEvento('risk_projected', `end_balance=${d.projecao.saldoFinal}`);
@@ -923,7 +912,7 @@ Se quiser saber mais sobre algum desses pontos ou programar seu mês, é só me 
         const lista = c.servicos.join(', ').replace(/, ([^,]*)$/, ' e $1');
         pushIai(
           c.resolve
-            ? `Tem um ajuste pequeno que muda isso: você tem ${c.servicos.length} serviços de vídeo (${lista}). Ficando só com ${c.mantido}, você fecha o mês com [[pos:${brl(c.saldoFinalComCorte)} sobrando]]. Quer ver como fica?`
+            ? `Tem um ajuste pequeno que ${d.projecao.saldoFinal < 0 ? 'muda isso' : 'aumenta essa folga'}: você tem ${c.servicos.length} serviços de vídeo (${lista}). Ficando só com ${c.mantido}, você economiza **${brl(c.economiaMensal)} por mês** e fecha o mês com [[pos:${brl(c.saldoFinalComCorte)} sobrando]]. Quer ver como fica?`
             : `Tem um ajuste pequeno que ajuda: você tem ${c.servicos.length} serviços de vídeo (${lista}). Ficando só com ${c.mantido}, você economiza **${brl(c.economiaMensal)} por mês** e libera ${brl(c.ganhoAteSalario)} até o salário, mas ainda fecharia com [[neg:${signed(c.saldoFinalComCorte)}]]. Quer ver como fica?`,
           {
             planCards: [
@@ -957,7 +946,10 @@ Se quiser saber mais sobre algum desses pontos ou programar seu mês, é só me 
         planBlock: 'alternativas',
         planCards: [
           { label: 'Reagendar o Pix', action: 'proposta' },
-          { label: 'Usar o limite da conta' },
+          {
+            label:
+              d.projecao.saldoFinal < 0 || !d.ajusteGasto ? 'Usar o limite da conta' : `Colocar um teto em ${d.ajusteGasto.categoria}`,
+          },
           { label: 'Nenhuma dessas' },
         ],
       });
@@ -1125,7 +1117,7 @@ Se quiser saber mais sobre algum desses pontos ou programar seu mês, é só me 
       {
         id: `receipt-${Date.now()}`,
         sender: 'iai',
-        text: `Pronto, Maria! Seu Pix de **${formatBRL(comprovante.amount)}** para **${comprovante.contato.primeiroNome}** foi enviado. Aqui está o comprovante:`,
+        text: `Pronto, ${cliente.primeiroNome}! Seu Pix de **${formatBRL(comprovante.amount)}** para **${comprovante.contato.primeiroNome}** foi enviado. Aqui está o comprovante:`,
         timestamp: nowTime(),
         pixReceipt: comprovante,
       },
@@ -1261,7 +1253,7 @@ Se quiser saber mais sobre algum desses pontos ou programar seu mês, é só me 
 
           <div className="space-y-3 flex-1 max-w-[320px]">
             <p className="text-xs font-semibold text-slate-800 leading-snug">
-              ia.i, Maria! Vamos programar os gastos deste mês?
+              ia.i, {cliente.primeiroNome}! Vamos programar os gastos deste mês?
             </p>
 
             {/* Suggestion Cards */}
@@ -1314,7 +1306,7 @@ Se quiser saber mais sobre algum desses pontos ou programar seu mês, é só me 
         {messages.map((msg) => (
           <div key={msg.id} className="animate-fadeIn">
             {msg.sender === 'user' ? (
-              /* User Message - Right Aligned with "MA" Avatar */
+              /* User Message - Right Aligned with the client avatar */
               <div className="flex items-end justify-end gap-2.5">
                 <div className="bg-[#EBEFF4] border border-slate-200/80 rounded-2xl rounded-tr-xs px-4 py-2.5 max-w-[280px] shadow-2xs">
                   {msg.audio ? (
@@ -1330,9 +1322,9 @@ Se quiser saber mais sobre algum desses pontos ou programar seu mês, é só me 
                   </div>
                 </div>
 
-                {/* Dark User Avatar "MA" (Maria) */}
-                <div className="w-8 h-8 rounded-full bg-[#1A1F2C] text-white font-bold text-xs flex items-center justify-center shrink-0 shadow-xs" title="Maria">
-                  MA
+                {/* Dark User Avatar (iniciais da cliente) */}
+                <div className="w-8 h-8 rounded-full bg-[#1A1F2C] text-white font-bold text-xs flex items-center justify-center shrink-0 shadow-xs" title={cliente.nome}>
+                  {cliente.iniciais}
                 </div>
               </div>
             ) : (
@@ -1455,7 +1447,7 @@ Se quiser saber mais sobre algum desses pontos ou programar seu mês, é só me 
                           <SlidersHorizontal className="w-3.5 h-3.5 text-[#EC7000]" />
                           Resumo dos Tetos Propostos
                         </span>
-                        <span className="text-[10px] text-slate-500 font-mono">Salário R$ 10.000,00</span>
+                        <span className="text-[10px] text-slate-500 font-mono">Renda {formatBRL(cliente.renda.mensal)}</span>
                       </div>
                       <div className="space-y-2">
                         {msg.categoryCaps.map((c) => (

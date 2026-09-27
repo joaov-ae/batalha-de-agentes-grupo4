@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { useCliente, brlCliente } from '../cliente/ClienteContext';
 import { 
   ArrowLeft, 
   Zap, 
@@ -20,6 +21,7 @@ interface PixModalProps {
 }
 
 export const PixModal: React.FC<PixModalProps> = ({ onNavigate, pixParams }) => {
+  const cliente = useCliente();
   const [selectedMode, setSelectedMode] = useState<'contato' | 'copia_cola' | 'qr_code'>(
     pixParams?.mode || 'contato'
   );
@@ -200,7 +202,7 @@ export const PixModal: React.FC<PixModalProps> = ({ onNavigate, pixParams }) => 
               <section className="bg-gradient-to-r from-[#FFFDF9] via-[#FFF6EE] to-[#FFEDE0] rounded-2xl p-4 border border-[#FFDFC4] shadow-sm relative overflow-hidden">
                 <div className="flex items-start justify-between gap-3">
                   <p className="text-xs font-medium text-slate-800 leading-relaxed pr-1">
-                    <strong>R$ 10.000,00 a mais na conta!</strong> Vamos programar os gastos deste mês, na medida para você?
+                    <strong>{brlCliente(cliente.renda.salario)} a mais na conta!</strong> Vamos programar os gastos deste mês, na medida para você?
                   </p>
                   <div className="flex-shrink-0 pt-0.5">
                     <Sparkles className="w-4 h-4 text-itau-orange animate-pulse" />

@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { useCliente, brlCliente } from '../cliente/ClienteContext';
 import { 
   Sparkles, 
   X, 
@@ -24,6 +25,7 @@ export const IaiLandingScreen: React.FC<IaiLandingScreenProps> = ({
   onActivateWithCategoryCaps,
   onGoToRegularChat,
 }) => {
+  const cliente = useCliente();
   const [agreed, setAgreed] = useState(false);
   const [showToast, setShowToast] = useState(false);
 
@@ -114,7 +116,7 @@ export const IaiLandingScreen: React.FC<IaiLandingScreenProps> = ({
             <div>
               <h3 className="text-xs font-bold text-[#002244]">Controle de Gastos por Categoria</h3>
               <p className="text-[11px] text-slate-500 leading-relaxed mt-0.5">
-                Calcula automaticamente tetos em dinheiro e porcentagem para Essenciais, Lazer e Transporte a partir do seu salário de R$ 10.000.
+                Calcula automaticamente tetos em dinheiro e porcentagem para Essenciais, Lazer e Transporte a partir da sua renda de {brlCliente(cliente.renda.mensal)}.
               </p>
             </div>
           </div>

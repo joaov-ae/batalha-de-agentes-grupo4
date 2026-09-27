@@ -12,6 +12,7 @@ import {
   ExternalLink,
   SlidersHorizontal,
 } from 'lucide-react';
+import { useCliente } from '../cliente/ClienteContext';
 
 export interface MenuScreenProps {
   onNavigateToCartoes: () => void;
@@ -35,16 +36,17 @@ export const MenuScreen: React.FC<MenuScreenProps> = ({
   onOpenStorybook,
   className = '',
 }) => {
+  const cliente = useCliente();
   return (
     <div className={`bg-[#F4F6F8] min-h-full pb-20 select-none text-slate-800 ${className}`}>
       {/* Header Profile */}
       <div className="bg-white p-5 border-b border-slate-100">
         <div className="flex items-center gap-3.5">
           <div className="w-12 h-12 rounded-full bg-[#002244] text-white font-bold text-base flex items-center justify-center shadow-sm">
-            RA
+            {cliente.iniciais}
           </div>
           <div className="flex-1">
-            <h2 className="font-bold text-base text-slate-900 leading-tight">Roberto Alves</h2>
+            <h2 className="font-bold text-base text-slate-900 leading-tight">{cliente.nome}</h2>
             <p className="text-xs text-slate-400 mt-0.5">Agência 0340 • Conta 92104-1</p>
           </div>
         </div>

@@ -56,6 +56,9 @@ export interface PlanoSalarioData {
     resolve: boolean;
   } | null;
   limiteConta: { juros: number };
+  ajusteGasto: { ajusteId: string; categoria: string; tetoSugerido: number; gastoMesAtual: number; mediaMensal: number } | null;
+  /** Projeção positiva, mas abaixo de 10% da renda (estado zero_a_zero) */
+  semMargem: boolean;
   proximoMes: { entradas: number; saidasFixas: number; gastoDiaADia: number };
 }
 
@@ -127,6 +130,18 @@ export const ProjectionChart: React.FC<{ pontos: PontoSaldo[]; tipo: 'neg' | 'po
             </text>
           </>
         )}
+        {tipo === 'neg' && idxNeg < 0 && (() => {
+          // Sem cruzar o zero: marca o ponto de folga mínima
+          const idxMin = saldos.indexOf(Math.min(...saldos));
+          return (
+            <>
+              <circle cx={x(idxMin)} cy={y(saldos[idxMin])} r="4" fill="#EC7000" />
+              <text x={Math.min(Math.max(x(idxMin), 50), W - 50)} y={H - 4} fontSize="9" fill="#B45309" textAnchor="middle">
+                folga de só {brl(saldos[idxMin])} ~dia {dia(pontos[idxMin].data)}
+              </text>
+            </>
+          );
+        })()}
         {tipo === 'pos' && (
           <>
             <circle cx={x(ultimo)} cy={y(pontos[ultimo].saldo)} r="4" fill="#1E8E3E" />
@@ -196,14 +211,34 @@ export const AlternativasBox: React.FC<{ plano: PlanoSalarioData }> = ({ plano }
             → Você fecha o mês com <span className={p.saldoFinalMes >= 0 ? 'text-[#1E8E3E]' : 'text-[#C62828]'}>{signed(p.saldoFinalMes)}</span>
           </div>
         </div>
-        <div className="p-3 rounded-xl bg-[#FAFBFD] border border-slate-100 text-xs text-slate-700 leading-relaxed">
-          🏦 <b className="text-slate-900">Deixar o limite da conta cobrir</b>
-          <br />
-          A conta fica negativa por {dias} {dias === 1 ? 'dia' : 'dias'}, com juros do limite de cerca de {brl(plano.limiteConta.juros)}.
-          <div className="mt-1.5 font-semibold">
-            → Você fecha o mês com <span className="text-[#C62828]">{signed(plano.projecao.saldoFinal)}</span>
+        {plano.projecao.saldoFinal < 0 || !plano.ajusteGasto ? (
+          <div className="p-3 rounded-xl bg-[#FAFBFD] border border-slate-100 text-xs text-slate-700 leading-relaxed">
+            🏦 <b className="text-slate-900">Deixar o limite da conta cobrir</b>
+            <br />
+            {plano.projecao.saldoFinal < 0 ? (
+              <>
+                A conta fica negativa por {dias} {dias === 1 ? 'dia' : 'dias'}, com juros do limite de cerca de {brl(plano.limiteConta.juros)}.
+              </>
+            ) : (
+              <>Se aparecer um gasto fora do planejado, o limite cobre, mas você paga juros sobre cada dia no negativo.</>
+            )}
+            <div className="mt-1.5 font-semibold">
+              → Você fecha o mês com{' '}
+              <span className={plano.projecao.saldoFinal >= 0 ? 'text-[#1E8E3E]' : 'text-[#C62828]'}>{signed(plano.projecao.saldoFinal)}</span>
+            </div>
           </div>
-        </div>
+        ) : (
+          <div className="p-3 rounded-xl bg-[#FAFBFD] border border-slate-100 text-xs text-slate-700 leading-relaxed">
+            🧾 <b className="text-slate-900">Colocar um teto em {plano.ajusteGasto.categoria}</b>
+            <br />
+            Você já gastou {brl(plano.ajusteGasto.gastoMesAtual)} em {plano.ajusteGasto.categoria} este mês; a sua média é{' '}
+            {brl(plano.ajusteGasto.mediaMensal)}. Um teto de {brl(plano.ajusteGasto.tetoSugerido)} com aviso evita que isso vire o gasto fora do
+            planejado.
+            <div className="mt-1.5 font-semibold">
+              → Protege a sua folga de <span className="text-[#1E8E3E]">{brl(plano.projecao.saldoFinal)}</span>
+            </div>
+          </div>
+        )}
       </div>
     </Box>
   );

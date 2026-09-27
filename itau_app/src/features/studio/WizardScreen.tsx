@@ -11,6 +11,7 @@ import {
   X
 } from 'lucide-react';
 import { PersonaProfile, FinancialGoal, ScreenType } from './studioTypes';
+import { useCliente, brlCliente } from '../cliente/ClienteContext';
 
 interface WizardScreenProps {
   persona: PersonaProfile;
@@ -25,14 +26,23 @@ export const WizardScreen: React.FC<WizardScreenProps> = ({
   onGoalCreated,
   initialStep = 1,
 }) => {
-  const [step, setStep] = useState<number>(initialStep);
-  // Valor padrão e dinâmico conforme o vídeo (00:05 onde o usuário ajusta para R$ 3.100)
-  const [leisureLimit, setLeisureLimit] = useState<number>(3100);
-  const [transportLimit, setTransportLimit] = useState<number>(600);
-  const [completed, setCompleted] = useState(false);
-
+  const cliente = useCliente();
   const totalSalary = persona.monthlyIncome;
   const fixedTotal = persona.fixedCosts;
+  const sobra = Math.max(0, totalSalary - fixedTotal);
+
+  // Valores sugeridos vêm dos tetos calculados sobre o extrato real da cliente
+  const tetoEstilo = cliente.tetos.find((t) => t.categoria.startsWith('Lazer'))?.valor ?? Math.round(sobra * 0.5);
+  const tetoTransporte = cliente.tetos.find((t) => t.categoria.startsWith('Transporte'))?.valor ?? Math.round(sobra * 0.2);
+  const arred = (v: number) => Math.max(50, Math.round(v / 50) * 50);
+  const maxSlider = arred(sobra);
+
+  const [step, setStep] = useState<number>(initialStep);
+  const [leisureLimit, setLeisureLimit] = useState<number>(arred(tetoEstilo));
+  const [transportLimit, setTransportLimit] = useState<number>(arred(tetoTransporte));
+  const [completed, setCompleted] = useState(false);
+  const reserva = Math.max(0, sobra - leisureLimit - transportLimit);
+  const pctRenda = (v: number) => `${((v / totalSalary) * 100).toFixed(1)}%`;
 
   const handleFinish = () => {
     const newGoal: FinancialGoal = {
@@ -40,7 +50,7 @@ export const WizardScreen: React.FC<WizardScreenProps> = ({
       title: 'Controle Mensal por Categoria',
       category: 'geral',
       targetAmount: leisureLimit + transportLimit + fixedTotal,
-      currentAmount: fixedTotal + 1450,
+      currentAmount: fixedTotal,
       color: '#EC7000',
       iconName: 'Sparkles',
       deadline: 'Programação ativa',
@@ -112,37 +122,43 @@ export const WizardScreen: React.FC<WizardScreenProps> = ({
 
             {/* Lista dos compromissos essenciais */}
             <div className="bg-[#FAFBFD] rounded-2xl p-4 space-y-2.5 border border-[#E8ECEF] shadow-xs">
-              <div className="flex justify-between items-center text-xs py-1.5 border-b border-slate-100">
-                <span className="text-slate-600 font-medium">Moradia & Condomínio</span>
-                <span className="font-bold font-mono text-slate-900">R$ 2.650</span>
-              </div>
-              <div className="flex justify-between items-center text-xs py-1.5 border-b border-slate-100">
-                <span className="text-slate-600 font-medium">Água e Luz (Sabesp / Enel)</span>
-                <span className="font-bold font-mono text-slate-900">R$ 340</span>
-              </div>
-              <div className="flex justify-between items-center text-xs py-1.5 border-b border-slate-100">
-                <span className="text-slate-600 font-medium">Internet & Telefonia</span>
-                <span className="font-bold font-mono text-slate-900">R$ 180</span>
-              </div>
-              <div className="flex justify-between items-center text-xs py-1.5">
-                <span className="text-slate-600 font-medium">Seguros Personnalité</span>
-                <span className="font-bold font-mono text-slate-900">R$ 450</span>
-              </div>
+              {cliente.fixas.grupos.map((g, i) => (
+                <div
+                  key={g.nome}
+                  className={`flex justify-between items-center text-xs py-1.5 ${i < cliente.fixas.grupos.length - 1 ? 'border-b border-slate-100' : ''}`}
+                >
+                  <span className="text-slate-600 font-medium">
+                    {g.icone} {g.nome}
+                  </span>
+                  <span className="font-bold font-mono text-slate-900">{brlCliente(g.valor, 0)}</span>
+                </div>
+              ))}
 
               {/* Total Comprometido */}
               <div className="pt-3 border-t border-slate-200 flex justify-between items-center text-sm font-bold">
                 <span className="text-[#002244]">Total Comprometido</span>
-                <span className="text-[#EC7000] font-mono text-base">R$ 3.620</span>
+                <span className="text-[#EC7000] font-mono text-base">{brlCliente(fixedTotal, 0)}</span>
               </div>
             </div>
 
-            {/* Box Verde com confirmação de folga financeira */}
-            <div className="p-3.5 bg-[#F0FDF4] rounded-2xl text-emerald-900 text-xs flex items-start gap-2.5 border border-emerald-200 shadow-xs">
-              <CheckCircle2 className="w-4 h-4 text-emerald-600 flex-shrink-0 mt-0.5" />
-              <span className="leading-relaxed">
-                Suas contas fixas usam apenas <strong>36,2%</strong> do salário. Você tem <strong>R$ 6.380 livres!</strong>
-              </span>
-            </div>
+            {/* Folga financeira: verde se as fixas cabem em 50% da renda, laranja se não */}
+            {cliente.fixas.percentualRenda <= 50 ? (
+              <div className="p-3.5 bg-[#F0FDF4] rounded-2xl text-emerald-900 text-xs flex items-start gap-2.5 border border-emerald-200 shadow-xs">
+                <CheckCircle2 className="w-4 h-4 text-emerald-600 flex-shrink-0 mt-0.5" />
+                <span className="leading-relaxed">
+                  Suas contas fixas usam apenas <strong>{pctRenda(fixedTotal)}</strong> da renda. Você tem{' '}
+                  <strong>{brlCliente(sobra, 0)} livres!</strong>
+                </span>
+              </div>
+            ) : (
+              <div className="p-3.5 bg-[#FFF8F0] rounded-2xl text-[#7A3E00] text-xs flex items-start gap-2.5 border border-[#FFD8B5] shadow-xs">
+                <ShieldCheck className="w-4 h-4 text-[#EC7000] flex-shrink-0 mt-0.5" />
+                <span className="leading-relaxed">
+                  Suas contas fixas usam <strong>{pctRenda(fixedTotal)}</strong> da sua renda de {brlCliente(totalSalary)}. Sobram{' '}
+                  <strong>{brlCliente(sobra, 0)}</strong> para o resto do mês: pouca margem para imprevistos. Vamos proteger essa folga?
+                </span>
+              </div>
+            )}
           </div>
         )}
 
@@ -177,8 +193,8 @@ export const WizardScreen: React.FC<WizardScreenProps> = ({
               <div className="space-y-2 px-1">
                 <input
                   type="range"
-                  min="1000"
-                  max="4500"
+                  min="0"
+                  max={maxSlider}
                   step="50"
                   value={leisureLimit}
                   onChange={(e) => setLeisureLimit(Number(e.target.value))}
@@ -186,14 +202,17 @@ export const WizardScreen: React.FC<WizardScreenProps> = ({
                 />
 
                 <div className="flex justify-between text-[10px] text-slate-400 font-medium">
-                  <span>Mínimo: R$ 1.000</span>
-                  <span className="text-[#EC7000] font-semibold">Sugerido: 30% (R$ 3.000)</span>
-                  <span>Máximo: R$ 4.500</span>
+                  <span>Mínimo: R$ 0</span>
+                  <span className="text-[#EC7000] font-semibold">
+                    Sugerido: {pctRenda(tetoEstilo)} ({brlCliente(tetoEstilo, 0)})
+                  </span>
+                  <span>Máximo: {brlCliente(maxSlider, 0)}</span>
                 </div>
               </div>
 
               <div className="text-[11px] text-slate-500 bg-white border border-slate-200 rounded-xl p-2.5 font-medium">
-                Representa <strong>{((leisureLimit / totalSalary) * 100).toFixed(1)}%</strong> da sua renda líquida mensal.
+                Representa <strong>{pctRenda(leisureLimit)}</strong> da sua renda líquida mensal. Hoje você gasta em média{' '}
+                <strong>{brlCliente(cliente.estiloDeVidaMedio, 0)}</strong> por mês com lazer, delivery e compras.
               </div>
             </div>
           </div>
@@ -227,8 +246,8 @@ export const WizardScreen: React.FC<WizardScreenProps> = ({
               <div className="space-y-2 px-1">
                 <input
                   type="range"
-                  min="300"
-                  max="1200"
+                  min="0"
+                  max={maxSlider}
                   step="50"
                   value={transportLimit}
                   onChange={(e) => setTransportLimit(Number(e.target.value))}
@@ -236,9 +255,9 @@ export const WizardScreen: React.FC<WizardScreenProps> = ({
                 />
 
                 <div className="flex justify-between text-[10px] text-slate-400 font-medium">
-                  <span>Mínimo: R$ 300</span>
-                  <span className="text-[#002244] font-semibold">Teto Médio: R$ 600</span>
-                  <span>Máximo: R$ 1.200</span>
+                  <span>Mínimo: R$ 0</span>
+                  <span className="text-[#002244] font-semibold">Sua média: {brlCliente(cliente.transporteMedio, 0)}</span>
+                  <span>Máximo: {brlCliente(maxSlider, 0)}</span>
                 </div>
               </div>
 
@@ -272,7 +291,7 @@ export const WizardScreen: React.FC<WizardScreenProps> = ({
               <div className="p-3.5 bg-white rounded-2xl border border-[#E8ECEF] flex items-center justify-between shadow-xs">
                 <div>
                   <h3 className="text-xs font-bold text-[#002244]">Essenciais Fixos</h3>
-                  <span className="text-[10px] text-slate-500">Moradia, contas, seguros</span>
+                  <span className="text-[10px] text-slate-500">Moradia, contas, escola, seguros</span>
                 </div>
                 <div className="text-right">
                   <span className="text-xs font-bold font-mono text-slate-900 block">
@@ -286,15 +305,13 @@ export const WizardScreen: React.FC<WizardScreenProps> = ({
               <div className="p-3.5 bg-[#FFFDF9] rounded-2xl border border-[#FFE8D6] flex items-center justify-between shadow-xs">
                 <div>
                   <h3 className="text-xs font-bold text-[#EC7000]">Lazer Sem Culpa</h3>
-                  <span className="text-[10px] text-slate-500">Restaurantes, cultura</span>
+                  <span className="text-[10px] text-slate-500">Lazer, delivery e compras</span>
                 </div>
                 <div className="text-right">
                   <span className="text-xs font-bold font-mono text-[#EC7000] block">
                     R$ {leisureLimit.toLocaleString('pt-BR')}
                   </span>
-                  <span className="text-[10px] text-orange-400 font-mono">
-                    {((leisureLimit / totalSalary) * 100).toFixed(1)}%
-                  </span>
+                  <span className="text-[10px] text-orange-400 font-mono">{pctRenda(leisureLimit)}</span>
                 </div>
               </div>
 
@@ -308,23 +325,21 @@ export const WizardScreen: React.FC<WizardScreenProps> = ({
                   <span className="text-xs font-bold font-mono text-[#0047BA] block">
                     R$ {transportLimit.toLocaleString('pt-BR')}
                   </span>
-                  <span className="text-[10px] text-blue-400 font-mono">
-                    {((transportLimit / totalSalary) * 100).toFixed(1)}%
-                  </span>
+                  <span className="text-[10px] text-blue-400 font-mono">{pctRenda(transportLimit)}</span>
                 </div>
               </div>
 
               {/* Investimento no Futuro */}
               <div className="p-3.5 bg-[#F0FDF4] rounded-2xl border border-[#DCFCE7] flex items-center justify-between shadow-xs">
                 <div>
-                  <h3 className="text-xs font-bold text-[#059669]">Investimento no Futuro</h3>
-                  <span className="text-[10px] text-slate-500">CDB 100% CDI Liquidez diária</span>
+                  <h3 className="text-xs font-bold text-[#059669]">Reserva para Imprevistos</h3>
+                  <span className="text-[10px] text-slate-500">O que sobra, no CDB 100% CDI com liquidez diária</span>
                 </div>
                 <div className="text-right">
                   <span className="text-xs font-bold font-mono text-[#059669] block">
-                    R$ 2.000,00
+                    {brlCliente(reserva)}
                   </span>
-                  <span className="text-[10px] text-emerald-600 font-mono">20,0%</span>
+                  <span className="text-[10px] text-emerald-600 font-mono">{pctRenda(reserva)}</span>
                 </div>
               </div>
             </div>

@@ -26,6 +26,7 @@ import { FeedbackBanner } from '../../design-system/molecules/FeedbackBanner';
 import { MeusBeneficiosCard } from '../../design-system/molecules/MeusBeneficiosCard';
 import { ItauButton } from '../../design-system/atoms/ItauButton';
 import { PaymentModal } from '../../design-system/organisms/PaymentModal';
+import { useCliente } from '../cliente/ClienteContext';
 
 export interface CartoesScreenProps {
   onBack?: () => void;
@@ -43,6 +44,7 @@ export const CartoesScreen: React.FC<CartoesScreenProps> = ({
   onOpenSimulador,
   className = '',
 }) => {
+  const cliente = useCliente();
   const [activeCardIndex, setActiveCardIndex] = useState(0);
   const [isLocked, setIsLocked] = useState(false);
   const [showVirtual, setShowVirtual] = useState(false);
@@ -68,7 +70,7 @@ export const CartoesScreen: React.FC<CartoesScreenProps> = ({
       cardName: 'Itaú Click',
       lastDigits: '1226',
       type: 'Crédito',
-      holderName: 'ROBERTO ALVES',
+      holderName: cliente.nome.toUpperCase(),
       invoiceAmount: isPaid ? 0.0 : 1000.0,
       availableLimit: isPaid ? 2000.0 : 1000.0,
       totalLimit: 8000.0,
@@ -80,7 +82,7 @@ export const CartoesScreen: React.FC<CartoesScreenProps> = ({
       cardName: 'Mastercard Black',
       lastDigits: '1234',
       type: 'Crédito Adicional',
-      holderName: 'ROBERTO ALVES',
+      holderName: cliente.nome.toUpperCase(),
       invoiceAmount: 3450.0,
       availableLimit: 12500.0,
       totalLimit: 25000.0,
@@ -92,7 +94,7 @@ export const CartoesScreen: React.FC<CartoesScreenProps> = ({
       cardName: 'Itaú Gold',
       lastDigits: '8839',
       type: 'Crédito',
-      holderName: 'ROBERTO ALVES',
+      holderName: cliente.nome.toUpperCase(),
       invoiceAmount: 420.0,
       availableLimit: 4580.0,
       totalLimit: 5000.0,

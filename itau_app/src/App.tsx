@@ -3,7 +3,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
+import { useCliente } from './features/cliente/ClienteContext';
 import { Wifi, Battery, Signal } from 'lucide-react';
 import { CartoesScreen } from './features/banking/CartoesScreen';
 import { ControleGastosWizard } from './features/banking/ControleGastosWizard';
@@ -44,11 +45,24 @@ const FULL_SCREENS: MobileScreen[] = ['wizard', 'iai', 'iai_landing', 'meta_deta
 const INITIAL_SALDOS: PixSaldos = { conta: 3776.24, limiteConta: 28000, infinite: 24572.2, black: 13220.98 };
 
 export default function App() {
+  const cliente = useCliente();
+  // Persona das telas do Studio montada com o perfil real da cliente (nome fictício)
+  const persona = useMemo(
+    () => ({
+      ...MARIA_PERSONA,
+      name: cliente.nome,
+      initials: cliente.iniciais,
+      monthlyIncome: cliente.renda.mensal,
+      fixedCosts: cliente.fixas.total,
+      currentInvoice: cliente.faturaCartao,
+    }),
+    [cliente],
+  );
   const [currentScreen, setCurrentScreen] = useState<MobileScreen>('hub');
   const [activeTab, setActiveTab] = useState<TabId>('inicio');
   const [goals, setGoals] = useState<FinancialGoal[]>(INITIAL_GOALS);
   const [selectedGoal, setSelectedGoal] = useState<FinancialGoal | null>(null);
-  // Gamificação: pontos Itaú Shop da Maria
+  // Gamificação: pontos Itaú Shop da cliente
   const [itauShopPoints, setItauShopPoints] = useState(3200);
   // Saldos compartilhados por Home, Extrato e Pix; descontados a cada Pix e aporte
   const [saldos, setSaldos] = useState<PixSaldos>(INITIAL_SALDOS);
@@ -258,7 +272,7 @@ export default function App() {
 
           {currentScreen === 'hub' && (
             <HubScreen
-              persona={MARIA_PERSONA}
+              persona={persona}
               goals={goals}
               itauShopPoints={itauShopPoints}
               saldo={saldos.conta}
@@ -298,7 +312,7 @@ export default function App() {
           )}
 
           {currentScreen === 'simulador' && (
-            <SimuladorScreen persona={MARIA_PERSONA} onNavigate={studioNavigate} onGoalCreated={handleGoalCreated} />
+            <SimuladorScreen persona={persona} onNavigate={studioNavigate} onGoalCreated={handleGoalCreated} />
           )}
 
           {currentScreen === 'extrato' && (

@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { useCliente } from '../cliente/ClienteContext';
 import {
   ChevronLeft,
   ChevronRight,
@@ -50,6 +51,8 @@ export interface PixComprovante {
   mensagem?: string;
   dataIso: string;
   idTransacao: string;
+  /** Nome de quem envia (cliente do app) */
+  pagador?: string;
 }
 
 export interface PixSaldos {
@@ -146,7 +149,7 @@ export const downloadComprovante = (c: PixComprovante) => {
     ['CPF', c.contato.documento],
     ['Instituição', `${c.contato.banco} (${c.contato.codigoBanco})`],
     [`Chave Pix (${c.contato.tipoChave})`, c.contato.chave],
-    ['De', 'Maria • Itaú Personnalité'],
+    ['De', `${c.pagador || 'Cliente'} • Itaú Personnalité`],
     ['Pago com', c.fonte.titulo],
     ['Tipo de transferência', 'Pix'],
   ];
@@ -214,6 +217,7 @@ const logEvento = (name: string, detail = '') =>
   }).catch(() => {});
 
 export const PixFlow: React.FC<PixFlowProps> = ({ amount: initialAmount, contato, saldos, pixGuard = false, onClose, onDone }) => {
+  const cliente = useCliente();
   const [step, setStep] = useState<Step>('fonte');
   const [guard, setGuard] = useState<PixGuardResult | null>(null);
   const [checkingGuard, setCheckingGuard] = useState(false);
@@ -328,6 +332,7 @@ export const PixFlow: React.FC<PixFlowProps> = ({ amount: initialAmount, contato
         mensagem: mensagem.trim() || undefined,
         dataIso: now.toISOString(),
         idTransacao: `E60701190${stamp}${rand}`,
+        pagador: cliente.nome,
       });
       setSenha('');
       setStep('sucesso');

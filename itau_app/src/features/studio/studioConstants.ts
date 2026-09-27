@@ -1,8 +1,8 @@
 import { PersonaProfile, FinancialGoal, Transaction, InvestmentSuggestion } from './studioTypes';
 
 export const MARIA_PERSONA: PersonaProfile = {
-  name: 'Maria Andrade',
-  initials: 'MA',
+  name: 'Renata Lopes', // sobrescrito em App.tsx pelo perfil real (/api/cliente)
+  initials: 'RL',
   segment: 'Itaú Personnalité',
   level: 4,
   monthlyIncome: 10000.00,

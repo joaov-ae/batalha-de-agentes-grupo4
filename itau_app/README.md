@@ -48,7 +48,9 @@ saídas até o salário → projeção negativa (gráfico da série diária) →
 reagendar Pix vs. limite da conta → proposta com este mês e próximo mês → biometria → projeção recalculada e
 limite semanal → avisar quem recebe → opt-in "Pode me avisar" → avaliação (joinha + motivo).
 
-- **Cliente da demo ("Maria")**: `d6c59567-bb6d-4a01-a0bd-f9b6f811724b`, estado `vai_faltar` no `data_manager`.
+- **Cliente da demo**: "Renata Lopes" (nome fictício) = `5865ce27-0681-4dcc-9475-3df9d15a6858`, estado
+  `zero_a_zero` no `data_manager`. Perfil servido por `GET /api/cliente` e lido no front por `ClienteContext`
+  (ver `_agent_context/itau_app/` para o critério de escolha e as métricas do segmento).
 - **Números por regra, nunca pelo LLM**: o servidor chama o `data-manager-itau` (privado) com token de identidade
   da SA (`roles/run.invoker`): `/status`, `/compromissos`, `/projecao`, `/ajustes`, `/recorrencias`,
   `POST /simulacoes/transacao`, `POST /acoes/agendar-pix` (simulada) e `POST /memoria/decisoes`.
