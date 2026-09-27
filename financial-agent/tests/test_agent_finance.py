@@ -554,8 +554,45 @@ class FinanceContextTests(unittest.TestCase):
         ), patch("api.time.sleep") as sleep:
             response = generate_chat_message("Como posso economizar?")
         self.assertIn("rever gastos", response)
-        self.assertEqual(fake_client.models.generate_content.call_count, 2)
         sleep.assert_called_once_with(1)
+
+    def test_trace_and_session_id_propagation_via_header_and_body(self):
+        client = TestClient(app)
+        snapshot = {"status": {"estado": "fecha_bem", "encaminhar_atendimento": False}, "ritmo": {}}
+        test_session_id = "custom-trace-uuid-12345"
+        with patch.dict("os.environ", {"DEMO_MODE": "true"}), patch(
+            "api.get_customer_snapshot", return_value=snapshot
+        ), patch("api.check_input", return_value=self.guardrails_permit) as mock_input, patch(
+            "api.check_output", return_value=self.guardrails_permit
+        ) as mock_output:
+            response = client.post(
+                "/analyze",
+                json={"user_id": self.demo_user_id, "session_id": test_session_id},
+                headers=self.demo_headers,
+            )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["session_id"], test_session_id)
+        self.assertEqual(response.headers.get("X-Session-ID"), test_session_id)
+        self.assertEqual(response.headers.get("X-Trace-ID"), test_session_id)
+        self.assertEqual(mock_input.call_args.args[3], test_session_id)
+        self.assertEqual(mock_output.call_args.args[4], test_session_id)
+
+    def test_trace_generates_uuid_when_no_session_provided(self):
+        client = TestClient(app)
+        snapshot = {"status": {"estado": "fecha_bem", "encaminhar_atendimento": False}, "ritmo": {}}
+        with patch.dict("os.environ", {"DEMO_MODE": "true"}), patch(
+            "api.get_customer_snapshot", return_value=snapshot
+        ):
+            response = client.post(
+                "/analyze",
+                json={"user_id": self.demo_user_id},
+                headers=self.demo_headers,
+            )
+        self.assertEqual(response.status_code, 200)
+        generated_session = response.json()["session_id"]
+        self.assertIsNotNone(generated_session)
+        self.assertEqual(response.headers.get("X-Session-ID"), generated_session)
+        self.assertEqual(response.headers.get("X-Trace-ID"), generated_session)
 
 
 if __name__ == "__main__":

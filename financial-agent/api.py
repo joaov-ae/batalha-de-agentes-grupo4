@@ -5,6 +5,7 @@ import os
 import re
 import time
 import unicodedata
+import uuid
 from functools import lru_cache
 
 import firebase_admin
@@ -22,7 +23,7 @@ from data_manager_client import (
     get_customer_adjustments,
     get_customer_snapshot,
 )
-from fastapi import FastAPI, Header, HTTPException
+from fastapi import FastAPI, Header, HTTPException, Response
 from fastapi.middleware.cors import CORSMiddleware
 from firebase_admin import auth as firebase_auth
 from google import genai
@@ -44,7 +45,19 @@ app.add_middleware(
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
+    expose_headers=["X-Session-ID", "X-Trace-ID"],
 )
+
+
+def _resolve_session_id(
+    body_session_id: str | None,
+    header_session_id: str | None,
+    header_trace_id: str | None,
+) -> str:
+    for candidate in (body_session_id, header_session_id, header_trace_id):
+        if candidate and candidate.strip():
+            return candidate.strip()
+    return str(uuid.uuid4())
 
 
 class AnalyzeRequest(BaseModel):
@@ -53,6 +66,7 @@ class AnalyzeRequest(BaseModel):
         max_length=36,
         pattern=r"^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$",
     )
+    session_id: str | None = Field(default=None, max_length=128)
 
 
 class AnalyzeResponse(BaseModel):
@@ -62,6 +76,7 @@ class AnalyzeResponse(BaseModel):
     requer_consentimento_para_economia: bool
     tendencia: dict
     modo_demo: bool = False
+    session_id: str | None = None
 
 
 class SavingsRequest(AnalyzeRequest):
@@ -71,6 +86,7 @@ class SavingsRequest(AnalyzeRequest):
 class SavingsResponse(AgentResponse):
     periodo: dict
     modo_demo: bool = False
+    session_id: str | None = None
 
 
 class ChatRequest(AnalyzeRequest):
@@ -82,6 +98,7 @@ class ChatResponse(BaseModel):
     mensagem: str
     periodo: dict | None = None
     modo_demo: bool = False
+    session_id: str | None = None
 
 
 def _period(data_reference: str | None) -> dict:
@@ -227,16 +244,23 @@ def _output_text(payload: dict) -> str:
     return "\n".join(line for line in lines if line)
 
 
-async def _guard_static_output(text: str, user_id: str, tool_context: dict, user_message: str | None = None) -> str | None:
+async def _guard_static_output(
+    text: str,
+    user_id: str,
+    tool_context: dict,
+    user_message: str | None = None,
+    session_id: str | None = None,
+) -> str | None:
     verdict = await asyncio.to_thread(
         check_output,
         text,
         user_message,
         tool_context,
         user_id,
+        session_id,
     )
     if verdict.get("degradado"):
-        logger.warning("Guardrails semantic layer degraded on static response")
+        logger.warning("[%s] Guardrails semantic layer degraded on static response", session_id)
     if verdict.get("decisao") == "permitir" and verdict.get("permitido"):
         return text
     if verdict.get("decisao") == "mascarar" and verdict.get("texto_sanitizado"):
@@ -249,6 +273,7 @@ async def _guard_chat_output(
     user_id: str,
     user_message: str,
     tool_context: dict,
+    session_id: str | None = None,
 ) -> str:
     instruction = None
     for attempt in range(1, 4):
@@ -258,11 +283,11 @@ async def _guard_chat_output(
             user_message,
             tool_context,
             user_id,
-            None,
+            session_id,
             attempt,
         )
         if verdict.get("degradado"):
-            logger.warning("Guardrails semantic layer degraded on chat output")
+            logger.warning("[%s] Guardrails semantic layer degraded on chat output", session_id)
         decision = verdict.get("decisao")
         if decision == "permitir" and verdict.get("permitido"):
             return answer
@@ -450,20 +475,29 @@ def generate_chat_message(
 @app.post("/analyze", response_model=AnalyzeResponse)
 async def analyze(
     request: AnalyzeRequest,
+    response: Response,
     firebase_id_token: str | None = Header(default=None, alias="X-Firebase-ID-Token"),
     demo_access_key: str | None = Header(default=None, alias="X-Demo-Access-Key"),
+    x_session_id: str | None = Header(default=None, alias="X-Session-ID"),
+    x_trace_id: str | None = Header(default=None, alias="X-Trace-ID"),
 ) -> dict:
+    session_id = _resolve_session_id(request.session_id, x_session_id, x_trace_id)
+    response.headers["X-Session-ID"] = session_id
+    response.headers["X-Trace-ID"] = session_id
     user_id = verify_finance_user(request.user_id, firebase_id_token, demo_access_key)
     
     # Guardrail de Entrada: Valida a intenção de análise
     try:
-        entry_verdict = await asyncio.to_thread(check_input, "Solicitação de análise de perfil", user_id)
+        entry_verdict = await asyncio.to_thread(
+            check_input, "Solicitação de análise de perfil", user_id, None, session_id
+        )
         if entry_verdict.get("decisao") == "bloquear":
             return {
                 "status": "entrada_bloqueada",
                 "mensagem": entry_verdict.get("resposta_sugerida") or "Não foi possível processar sua análise agora.",
                 "requer_consentimento_para_economia": False,
                 "tendencia": {},
+                "session_id": session_id,
             }
     except GuardrailsUnavailable:
         pass
@@ -475,14 +509,15 @@ async def analyze(
     except DataManagerUnavailable as exc:
         raise HTTPException(status_code=503, detail="Serviço financeiro temporariamente indisponível.") from exc
     except DataManagerError as exc:
-        logger.exception("data_manager analyze status lookup failed")
+        logger.exception("[%s] data_manager analyze status lookup failed", session_id)
         raise HTTPException(status_code=502, detail="Não foi possível consultar o serviço financeiro.") from exc
     except Exception as exc:
-        logger.exception("data_manager analyze lookup failed")
+        logger.exception("[%s] data_manager analyze lookup failed", session_id)
         raise HTTPException(status_code=502, detail="Não foi possível consultar os dados financeiros.") from exc
     result = {
         **_status_alert(snapshot),
         "modo_demo": os.getenv("DEMO_MODE", "false").lower() == "true",
+        "session_id": session_id,
     }
     
     # Guardrail de Saída: Valida a resposta gerada
@@ -491,6 +526,8 @@ async def analyze(
             _output_text(result),
             user_id,
             {"status": snapshot["status"], "ritmo": snapshot.get("ritmo")},
+            None,
+            session_id,
         )
     except GuardrailsUnavailable as exc:
         raise HTTPException(status_code=503, detail="Guardrails temporariamente indisponíveis.") from exc
@@ -508,16 +545,24 @@ async def analyze(
 @app.post("/savings", response_model=SavingsResponse)
 async def savings(
     request: SavingsRequest,
+    response: Response,
     firebase_id_token: str | None = Header(default=None, alias="X-Firebase-ID-Token"),
     demo_access_key: str | None = Header(default=None, alias="X-Demo-Access-Key"),
+    x_session_id: str | None = Header(default=None, alias="X-Session-ID"),
+    x_trace_id: str | None = Header(default=None, alias="X-Trace-ID"),
 ) -> dict:
+    session_id = _resolve_session_id(request.session_id, x_session_id, x_trace_id)
+    response.headers["X-Session-ID"] = session_id
+    response.headers["X-Trace-ID"] = session_id
     if not request.consent:
         raise HTTPException(status_code=409, detail="A análise de oportunidades requer consentimento explícito.")
     user_id = verify_finance_user(request.user_id, firebase_id_token, demo_access_key)
 
     # Guardrail de Entrada
     try:
-        entry_verdict = await asyncio.to_thread(check_input, "Solicitação de plano de economia", user_id)
+        entry_verdict = await asyncio.to_thread(
+            check_input, "Solicitação de plano de economia", user_id, None, session_id
+        )
         if entry_verdict.get("decisao") == "bloquear":
              raise HTTPException(status_code=403, detail=entry_verdict.get("resposta_sugerida") or "Acesso negado.")
     except GuardrailsUnavailable:
@@ -532,6 +577,7 @@ async def savings(
                 **plan,
                 "periodo": _period(status.get("data_referencia")),
                 "modo_demo": os.getenv("DEMO_MODE", "false").lower() == "true",
+                "session_id": session_id,
             }
         adjustments = get_customer_adjustments(user_id, status)
     except DataManagerNotFound as exc:
@@ -539,10 +585,10 @@ async def savings(
     except DataManagerUnavailable as exc:
         raise HTTPException(status_code=503, detail="Serviço financeiro temporariamente indisponível.") from exc
     except DataManagerError as exc:
-        logger.exception("data_manager rejected the savings request")
+        logger.exception("[%s] data_manager rejected the savings request", session_id)
         raise HTTPException(status_code=502, detail="Não foi possível consultar o serviço financeiro.") from exc
     except Exception as exc:
-        logger.exception("data_manager savings lookup failed")
+        logger.exception("[%s] data_manager savings lookup failed", session_id)
         raise HTTPException(status_code=502, detail="Não foi possível consultar os dados financeiros.") from exc
 
     plan = _adjustments_response(adjustments, status)
@@ -550,10 +596,11 @@ async def savings(
         **plan,
         "periodo": _period(status.get("data_referencia")),
         "modo_demo": os.getenv("DEMO_MODE", "false").lower() == "true",
+        "session_id": session_id,
     }
     raw_tools = {"status": status, "ajustes": adjustments}
     try:
-        checked = await _guard_static_output(_output_text(result), user_id, raw_tools)
+        checked = await _guard_static_output(_output_text(result), user_id, raw_tools, None, session_id)
     except GuardrailsUnavailable as exc:
         raise HTTPException(status_code=503, detail="Guardrails temporariamente indisponíveis.") from exc
     if checked != _output_text(result):
@@ -568,12 +615,18 @@ async def savings(
 @app.post("/chat", response_model=ChatResponse)
 async def chat(
     request: ChatRequest,
+    response: Response,
     firebase_id_token: str | None = Header(default=None, alias="X-Firebase-ID-Token"),
     demo_access_key: str | None = Header(default=None, alias="X-Demo-Access-Key"),
+    x_session_id: str | None = Header(default=None, alias="X-Session-ID"),
+    x_trace_id: str | None = Header(default=None, alias="X-Trace-ID"),
 ) -> dict:
+    session_id = _resolve_session_id(request.session_id, x_session_id, x_trace_id)
+    response.headers["X-Session-ID"] = session_id
+    response.headers["X-Trace-ID"] = session_id
     user_id = verify_finance_user(request.user_id, firebase_id_token, demo_access_key)
     try:
-        entry_task = asyncio.to_thread(check_input, request.message, user_id)
+        entry_task = asyncio.to_thread(check_input, request.message, user_id, None, session_id)
         snapshot_task = asyncio.to_thread(get_customer_snapshot, user_id)
         entry_verdict, snapshot = await asyncio.gather(entry_task, snapshot_task)
     except GuardrailsUnavailable as exc:
@@ -583,15 +636,15 @@ async def chat(
     except DataManagerUnavailable as exc:
         raise HTTPException(status_code=503, detail="Serviço financeiro temporariamente indisponível.") from exc
     except DataManagerError as exc:
-        logger.exception("data_manager chat status lookup failed")
+        logger.exception("[%s] data_manager chat status lookup failed", session_id)
         raise HTTPException(status_code=502, detail="Não foi possível consultar o serviço financeiro.") from exc
     except Exception as exc:
-        logger.exception("chat input safety checks failed")
+        logger.exception("[%s] chat input safety checks failed", session_id)
         raise HTTPException(status_code=503, detail="Validação de segurança temporariamente indisponível.") from exc
 
     status = snapshot["status"]
     if entry_verdict.get("degradado"):
-        logger.warning("Guardrails semantic layer degraded on chat input")
+        logger.warning("[%s] Guardrails semantic layer degraded on chat input", session_id)
 
     if entry_verdict.get("decisao") == "mascarar":
         safe_message = entry_verdict.get("texto_sanitizado")
@@ -602,6 +655,7 @@ async def chat(
                 "mensagem": safe_message,
                 "periodo": _period(status.get("data_referencia")),
                 "modo_demo": os.getenv("DEMO_MODE", "false").lower() == "true",
+                "session_id": session_id,
             }
         request.message = safe_message
     elif entry_verdict.get("decisao") == "bloquear" or not entry_verdict.get("permitido"):
@@ -610,6 +664,7 @@ async def chat(
             "mensagem": entry_verdict.get("resposta_sugerida") or "Não posso ajudar com esse pedido. Posso conversar sobre organização do orçamento.",
             "periodo": _period(status.get("data_referencia")),
             "modo_demo": os.getenv("DEMO_MODE", "false").lower() == "true",
+            "session_id": session_id,
         }
 
     if status.get("encaminhar_atendimento") or status.get("estado") == "ja_no_buraco":
@@ -618,10 +673,11 @@ async def chat(
             "mensagem": "Pelos dados disponíveis, este caso precisa de atendimento humano. Não vou sugerir novos cortes agora.",
             "periodo": _period(status.get("data_referencia")),
             "modo_demo": os.getenv("DEMO_MODE", "false").lower() == "true",
+            "session_id": session_id,
         }
         try:
             result["mensagem"] = await _guard_static_output(
-                result["mensagem"], user_id, {"status": status}, request.message
+                result["mensagem"], user_id, {"status": status}, request.message, session_id
             ) or result["mensagem"]
         except GuardrailsUnavailable as exc:
             raise HTTPException(status_code=503, detail="Guardrails temporariamente indisponíveis.") from exc
@@ -639,10 +695,11 @@ async def chat(
             "mensagem": out_of_scope,
             "periodo": _period(status.get("data_referencia")),
             "modo_demo": os.getenv("DEMO_MODE", "false").lower() == "true",
+            "session_id": session_id,
         }
         try:
             result["mensagem"] = await _guard_static_output(
-                result["mensagem"], user_id, {"status": status}, request.message
+                result["mensagem"], user_id, {"status": status}, request.message, session_id
             ) or result["mensagem"]
         except GuardrailsUnavailable as exc:
             raise HTTPException(status_code=503, detail="Guardrails temporariamente indisponíveis.") from exc
@@ -660,13 +717,15 @@ async def chat(
             user_id,
             request.message,
             {"status": status, "ritmo": snapshot.get("ritmo")},
+            session_id,
         )
         return {
             "status": "respondido",
             "mensagem": answer,
             "periodo": _period(status.get("data_referencia")),
             "modo_demo": os.getenv("DEMO_MODE", "false").lower() == "true",
+            "session_id": session_id,
         }
     except Exception as exc:
-        logger.exception("Scoped chat response generation failed")
+        logger.exception("[%s] Scoped chat response generation failed", session_id)
         raise HTTPException(status_code=503, detail="O assistente está temporariamente indisponível.") from exc
