@@ -20,7 +20,7 @@ IMAGEM=us-central1-docker.pkg.dev/${PROJETO}/agentes/data-manager-itau:${TAG}
 # Usa a Service Account dedicada criada no projeto com papéis de BigQuery (admin/jobUser) e logging:
 SA=${SA:-squad-agent-sa@batalha-time-04-z85x.iam.gserviceaccount.com}
 DATA_REFERENCIA=${DATA_REFERENCIA:-2025-12-15}
-ALLOW_UNAUTHENTICATED=${ALLOW_UNAUTHENTICATED:-true}
+ALLOW_UNAUTHENTICATED=${ALLOW_UNAUTHENTICATED:-false}
 RUN_PIPELINE=${RUN_PIPELINE:-false}
 SA_AGENTE=${SA_AGENTE:-}   # SA do serviço do agente que vai chamar a API (se autenticado)
 
