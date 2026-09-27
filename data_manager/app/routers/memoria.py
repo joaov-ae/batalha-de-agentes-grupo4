@@ -17,6 +17,8 @@ from app.schemas import (
     DecisaoPedido,
     LembreteTetoPedido,
     MetaReservaPedido,
+    RegistroPoupancaPedido,
+    RegistroPoupancaResposta,
     SepararReservaPedido,
 )
 from app.servicos import ciclo_seguinte
@@ -27,7 +29,7 @@ router = APIRouter(prefix="/v1/clientes/{id_usuario}", tags=["memoria e acoes"])
 @router.get(
     "/memoria",
     operation_id="obter_memoria",
-    summary="Ajustes aceitos e recusados, resultado do ciclo anterior e meta de reserva",
+    summary="Ajustes aceitos e recusados, resultado do ciclo anterior, meta de reserva e histórico de poupança",
 )
 def obter_memoria(f: ClienteDep, memoria: MemoriaDep) -> dict[str, Any]:
     eventos = memoria.eventos(f.id_usuario)
@@ -36,15 +38,52 @@ def obter_memoria(f: ClienteDep, memoria: MemoriaDep) -> dict[str, Any]:
     if renda is not None:
         ciclo = bq.run_file("resultado_ciclo_anterior", id_usuario=f.id_usuario, micro_renda=renda.micro)[0]
     recusas = memoria.recusas(f.id_usuario)
+    total_poupado = memoria.total_poupado(f.id_usuario)
     return {
         "id_usuario": f.id_usuario,
         "ajustes_aceitos": sorted({e["ajuste_id"] for e in eventos if e["tipo_evento"] == "decisao_ajuste" and e["aceito"]}),
         "ajustes_recusados": recusas,
         "ajustes_bloqueados": sorted(k for k, n in recusas.items() if n >= MAX_RECUSAS),
         "meta_reserva": memoria.meta_reserva(f.id_usuario),
+        "total_poupado": total_poupado,
+        "historico_poupanca": memoria.poupancas(f.id_usuario),
         "acoes_simuladas": memoria.acoes(f.id_usuario),
         "ciclo_anterior": ciclo,
+        "formatado": {
+            "total_poupado": fmt.brl(total_poupado),
+        },
     }
+
+
+@router.post(
+    "/memoria/poupar",
+    operation_id="registrar_poupanca",
+    response_model=RegistroPoupancaResposta,
+    summary="Registra decisão do cliente de poupar/economizar (ex: desistiu de uma compra ou guardou sobra)",
+)
+def registrar_poupanca(f: ClienteDep, memoria: MemoriaDep, pedido: RegistroPoupancaPedido) -> RegistroPoupancaResposta:
+    evento = memoria.registrar_poupanca(
+        f.id_usuario,
+        valor=pedido.valor,
+        origem=pedido.origem,
+        motivo=pedido.motivo,
+    )
+    total = memoria.total_poupado(f.id_usuario)
+    msg = f"Economia de R$ {pedido.valor:.2f} registrada com sucesso. Total poupado: R$ {total:.2f}."
+    return RegistroPoupancaResposta(
+        id_usuario=f.id_usuario,
+        valor_poupado=pedido.valor,
+        total_poupado_acumulado=total,
+        origem=pedido.origem,
+        motivo=pedido.motivo,
+        criado_em=evento["criado_em"],
+        mensagem=msg,
+        formatado={
+            "valor_poupado": fmt.brl(pedido.valor),
+            "total_poupado_acumulado": fmt.brl(total),
+        },
+    )
+
 
 
 @router.post(

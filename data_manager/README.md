@@ -75,7 +75,8 @@ saldo alto e quem negativa costuma estar cronicamente no buraco.
 | `obter_status` | `GET /status` | **primeira chamada**: estado, projeção, score, juros |
 | `obter_projecao` | `GET /projecao` | saldo dia a dia até o salário |
 | `resumo_recebimento` | `GET /resumo-salario` | momento 1: sobra, por dia, quando acaba, top 3 ajustes |
-| `simular_transacao` | `POST /simulacoes/transacao` | momento 2: este Pix/compra negativa a conta? agendar resolve? |
+| `simular_transacao` | `POST /simulacoes/transacao` | momento 2: Pix/compra (à vista ou parcelada no cartão) negativa a conta? Quais contas compromete? Agendar resolve? |
+| `obter_opcoes_investimento` | `GET /investimentos` | opções de liquidez diária (CDB 100% CDI, Tesouro Selic, Fundo DI) para reserva (`fecha_bem`) |
 | `ritmo_do_mes` | `GET /ritmo` | momento 3: ritmo da semana vs 3 meses |
 | `listar_compromissos_ate_salario` | `GET /compromissos` | contas previstas até o salário |
 | `listar_recorrencias` | `GET /recorrencias` | salário, fixas, assinaturas, financiamentos |
@@ -91,7 +92,7 @@ saldo alto e quem negativa costuma estar cronicamente no buraco.
 | `gastos_acima_da_media` | `GET /ajustes/discricionarios` | acima da própria média |
 | `simular_reserva` | `POST /simulacoes/reserva` | separar R$ X no salário |
 | `simular_parcelamento_fatura` | `POST /simulacoes/parcelamento-fatura` | só com `TAXA_PARCELAMENTO_FATURA_MES` configurada (senão 409) |
-| `obter_memoria` / `registrar_decisao` / `definir_meta_reserva` | `/memoria...` | memória em processo |
+| `obter_memoria` / `registrar_decisao` / `registrar_poupanca` | `/memoria...` | memória em processo (inclui `POST /memoria/poupar` para "Prefiro poupar") |
 | `agendar_pix` / `separar_reserva` / `criar_lembrete_teto` | `POST /acoes/...` | **simuladas** (`simulado: true`) |
 
 Admin: `POST /admin/pipeline`, `POST /admin/cache/recarregar`, `GET /admin/contagem-estados`,

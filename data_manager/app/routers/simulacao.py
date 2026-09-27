@@ -26,7 +26,16 @@ router = APIRouter(prefix="/v1/clientes/{id_usuario}/simulacoes", tags=["simulac
     description="Nunca bloqueie o pagamento: mostre o efeito e ofereça agendar para data_sugerida ou 'agora não'.",
 )
 def simular_transacao(f: ClienteDep, store: StatusStoreDep, pedido: SimularTransacaoPedido) -> dict[str, Any]:
-    return servicos.simular_transacao(f, store, pedido.valor, pedido.data, pedido.canal, pedido.descricao)
+    return servicos.simular_transacao(
+        f,
+        store,
+        pedido.valor,
+        pedido.data,
+        pedido.canal,
+        pedido.descricao,
+        pedido.parcelas,
+    )
+
 
 
 @router.post(

@@ -130,3 +130,59 @@ def test_parcelamento_price():
     # PMT = 367.21 -> custo 101.63
     assert c.custo_parcelamento == pytest.approx(101.63, abs=0.01)
     assert not c.parcelar_compensa
+
+
+def test_simular_transacao_parcelas_e_contas_comprometidas():
+    from unittest.mock import MagicMock
+    from app.servicos import simular_transacao
+
+    fatura = item("Fatura Cartao", "S", "fatura", 25, 200.0)
+    aluguel = item("Aluguel", "S", "conta_fixa", 28, 600.0)
+    luz = item("Energia", "S", "conta_fixa", 30, 150.0)
+
+    f = cliente(saldo=500.0, itens=[fatura, aluguel, luz], ritmo=0.0)
+    store = MagicMock()
+    store.taxa_juros_dia = 0.002
+
+    # Compra à vista de R$ 400 em 16/12: saldo cai para 100, no dia 25 paga fatura (200) -> negativo!
+    res = simular_transacao(f, store, valor=400.0, data=date(2025, 12, 16), canal="pix", descricao="Compra urgente", parcelas=1)
+    assert res["fica_negativo"] is True
+    assert res["dia_que_acaba_depois"] == date(2025, 12, 25)
+    # Contas após dia 25: Fatura (dia 25), Aluguel (dia 28) e Luz (dia 30)
+    assert len(res["contas_comprometidas"]) >= 2
+    comprometidas_desc = [c["descricao"] for c in res["contas_comprometidas"]]
+    assert "Aluguel" in comprometidas_desc
+    assert "Energia" in comprometidas_desc
+
+
+def test_simular_transacao_cartao_parcelado():
+    from unittest.mock import MagicMock
+    from app.servicos import simular_transacao
+
+    fatura = item("Fatura Cartao", "S", "fatura", 25, 200.0)
+    f = cliente(saldo=300.0, itens=[fatura], ritmo=0.0)
+    store = MagicMock()
+    store.taxa_juros_dia = 0.002
+
+    # Compra no cartão em 3x de R$ 100 (total R$ 300)
+    res = simular_transacao(f, store, valor=300.0, data=date(2025, 12, 16), canal="cartao", descricao="Smartphone", parcelas=3)
+    assert res["parcelas"] == 3
+    assert res["valor_parcela"] == 100.0
+    assert res["formatado"]["valor_parcela"] == "R$ 100,00"
+
+
+def test_produtos_investimento():
+    from app.servicos import produtos_investimento
+
+    f = cliente(saldo=2500.0, itens=[], ritmo=0.0)
+    res = produtos_investimento(f)
+    assert res["id_usuario"] == "u1"
+    assert res["valor_sugerido_reserva"] > 0
+    assert len(res["produtos"]) == 3
+    nomes = [p["nome"] for p in res["produtos"]]
+    assert "CDB Itaú DI" in nomes
+    assert "Tesouro Selic 2029" in nomes
+    assert any(p["resgate_imediato"] is True for p in res["produtos"])
+    assert res["produtos"][0]["rendimento_estimado_mes"] > 0
+
+

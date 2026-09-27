@@ -91,11 +91,20 @@ class ResumoRecebimentoResposta(BaseModel):
     formatado: dict[str, str | None]
 
 
+class ContaComprometida(BaseModel):
+    data: date
+    descricao: str
+    valor: float
+    tipo_item: str
+    formatado: dict[str, str | None]
+
+
 class SimularTransacaoPedido(BaseModel):
     valor: float = Field(gt=0, description="Valor do Pix/pagamento/compra em R$.")
     data: date | None = Field(None, description="Data do débito; padrão = dia seguinte à data de referência.")
     canal: Literal["pix", "pagamento", "cartao"] = "pix"
     descricao: str = "nova transação"
+    parcelas: int = Field(1, ge=1, le=24, description="Número de parcelas (para compras no cartão). Padrão = 1.")
 
 
 class SimularTransacaoResposta(BaseModel):
@@ -110,6 +119,49 @@ class SimularTransacaoResposta(BaseModel):
     data_debito_na_conta: date
     data_sugerida: date | None = Field(description="Data (dia do salário) em que o pagamento não deixa a conta negativa.")
     data_sugerida_resolve: bool
+    parcelas: int = 1
+    valor_parcela: float | None = None
+    contas_comprometidas: list[ContaComprometida] = Field(
+        default_factory=list,
+        description="Contas fixas e faturas que vencerão após o dinheiro acabar e antes da próxima renda.",
+    )
+    formatado: dict[str, str | None]
+
+
+class ProdutoInvestimento(BaseModel):
+    nome: str
+    tipo: str
+    rentabilidade: str
+    liquidez: str
+    risco: str
+    resgate_imediato: bool
+    descricao: str
+    rendimento_estimado_mes: float | None = None
+    formatado: dict[str, str | None]
+
+
+class OpcoesInvestimentoResposta(BaseModel):
+    id_usuario: str
+    saldo_hoje: float
+    valor_sugerido_reserva: float
+    produtos: list[ProdutoInvestimento]
+    formatado: dict[str, str | None]
+
+
+class RegistroPoupancaPedido(BaseModel):
+    valor: float = Field(gt=0, description="Valor economizado/poupado em R$.")
+    origem: Literal["recusa_compra", "meta_reserva", "ajuste_categoria"] = "recusa_compra"
+    motivo: str | None = Field(None, description="Motivo ou descrição opcional da economia (ex: 'desistiu do fone').")
+
+
+class RegistroPoupancaResposta(BaseModel):
+    id_usuario: str
+    valor_poupado: float
+    total_poupado_acumulado: float
+    origem: str
+    motivo: str | None
+    criado_em: str
+    mensagem: str
     formatado: dict[str, str | None]
 
 

@@ -35,6 +35,12 @@ class MemoriaStore:
         metas = [e["valor"] for e in self.eventos(id_usuario) if e["tipo_evento"] == "meta_reserva"]
         return metas[-1] if metas else None
 
+    def poupancas(self, id_usuario: str) -> list[dict[str, Any]]:
+        return [e for e in self.eventos(id_usuario) if e["tipo_evento"] == "poupanca"]
+
+    def total_poupado(self, id_usuario: str) -> float:
+        return round(sum(e.get("valor", 0.0) or 0.0 for e in self.poupancas(id_usuario)), 2)
+
     def registrar(
         self,
         id_usuario: str,
@@ -55,6 +61,25 @@ class MemoriaStore:
             self._eventos[id_usuario].append(linha)
         return linha
 
+    def registrar_poupanca(
+        self,
+        id_usuario: str,
+        valor: float,
+        origem: str = "recusa_compra",
+        motivo: str | None = None,
+    ) -> dict[str, Any]:
+        linha = {
+            "evento_id": str(uuid.uuid4()),
+            "tipo_evento": "poupanca",
+            "valor": valor,
+            "origem": origem,
+            "motivo": motivo,
+            "criado_em": datetime.now(UTC).isoformat(),
+        }
+        with self._lock:
+            self._eventos[id_usuario].append(linha)
+        return linha
+
     def registrar_acao(self, id_usuario: str, tipo_acao: str, payload: dict[str, Any]) -> dict[str, Any]:
         linha = {
             "acao_id": str(uuid.uuid4()),
@@ -65,3 +90,4 @@ class MemoriaStore:
         with self._lock:
             self._acoes[id_usuario].append(linha)
         return linha
+
