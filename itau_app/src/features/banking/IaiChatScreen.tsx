@@ -129,9 +129,18 @@ interface ChatMessage {
   subtle?: boolean;
 }
 
+// Links para artigos da Central de Ajuda do app: [título](/ajuda/slug). Outros links ficam como texto.
+// O texto é escapado antes: a resposta do agente nunca vira HTML arbitrário.
+const escapeHtml = (s: string) =>
+  s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+
 // Destaque de valores no texto: [[pos:...]] verde, [[neg:...]] vermelho
 const formatRich = (s: string) =>
-  s
+  escapeHtml(s)
+    .replace(
+      /\[([^\]\n]{1,120})\]\((\/ajuda\/[a-z0-9-]{1,60})\)/g,
+      '<a href="$2" data-ajuda="$1" class="font-semibold text-[#EC7000] underline underline-offset-2 hover:text-[#D45D00]">$1</a>',
+    )
     .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
     .replace(/\[\[pos:(.*?)\]\]/g, '<b class="text-[#1E8E3E]">$1</b>')
     .replace(/\[\[neg:(.*?)\]\]/g, '<b class="text-[#C62828]">$1</b>');
@@ -1143,7 +1152,7 @@ export const IaiChatScreen: React.FC<IaiChatScreenProps> = ({
       await thinking(900);
       const cancelar = d.corte.servicos.filter((s) => s !== d.corte!.mantido).join(' e ');
       pushIai(
-        `Fica assim: mantendo o ${d.corte.mantido} e cancelando ${cancelar}, você economiza **${brl(d.corte.economiaMensal)} por mês** e fecha este mês com [[${d.corte.saldoFinalComCorte >= 0 ? 'pos' : 'neg'}:${signed(d.corte.saldoFinalComCorte)}]]. O cancelamento é feito no app de cada serviço.`,
+        `Fica assim: mantendo o ${d.corte.mantido} e cancelando ${cancelar}, você economiza **${brl(d.corte.economiaMensal)} por mês** e fecha este mês com [[${d.corte.saldoFinalComCorte >= 0 ? 'pos' : 'neg'}:${signed(d.corte.saldoFinalComCorte)}]]. Veja [Como cancelar uma assinatura de streaming ou serviço](/ajuda/cancelar-assinatura).`,
       );
       await perguntarOptin();
       return;
@@ -1588,7 +1597,17 @@ export const IaiChatScreen: React.FC<IaiChatScreenProps> = ({
                 </div>
 
                 <div className="flex-1 max-w-[340px] space-y-3">
-                  <div className="text-xs text-slate-800 leading-relaxed space-y-2 whitespace-pre-line">
+                  <div
+                    className="text-xs text-slate-800 leading-relaxed space-y-2 whitespace-pre-line"
+                    onClick={(e) => {
+                      // Artigo da Central de Ajuda: link dentro do app (o artigo em si ainda não existe)
+                      const link = (e.target as HTMLElement).closest('a[data-ajuda]') as HTMLAnchorElement | null;
+                      if (!link) return;
+                      e.preventDefault();
+                      logEvento('help_article_opened', link.getAttribute('href') || '');
+                      notify(`Abrindo “${link.dataset.ajuda}” na Central de Ajuda`);
+                    }}
+                  >
                     {msg.text.split('\n\n').filter(Boolean).map((paragraph, idx) => (
                       <p
                         key={idx}

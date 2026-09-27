@@ -580,10 +580,36 @@ class FinanceContextTests(unittest.TestCase):
             generate_chat_message("Me passa o link mais fácil", "fecha_bem", None, "", self.finance_context)
         system = fake_client.models.generate_content.call_args.kwargs["config"]["system_instruction"]
         self.assertIn("Capacidades:", system)
-        self.assertIn("não envia links", system)
+        self.assertIn("não indica caminhos de menu do app", system)
         self.assertIn("Só diga que não consegue quando o pedido for uma dessas ações", system)
         self.assertIn("na dúvida, responde com os dados", system)
-        self.assertIn("nunca mostrar links, caminhos ou telas", system)
+        # Procedimentos: link para o artigo da Central de Ajuda em vez de passo a passo
+        self.assertIn("não explique o passo a passo", system)
+        self.assertIn("[título](/ajuda/slug)", system)
+        self.assertIn("cartao-bloqueio-temporario: Como bloquear e desbloquear o cartão", system)
+        self.assertIn("nunca invente outro slug, nunca use links externos", system)
+
+    def test_chat_keeps_only_catalog_help_links(self):
+        from central_ajuda import limpar_links_ajuda
+
+        texto = (
+            "Veja [Como bloquear e desbloquear o cartão](/ajuda/cartao-bloqueio-temporario) "
+            "e [Artigo inventado](/ajuda/nao-existe). Ou [cancelar-assinatura](/ajuda/cancelar-assinatura)."
+        )
+        self.assertEqual(
+            limpar_links_ajuda(texto),
+            "Veja [Como bloquear e desbloquear o cartão](/ajuda/cartao-bloqueio-temporario) e Artigo inventado. "
+            "Ou [Como cancelar uma assinatura de streaming ou serviço](/ajuda/cancelar-assinatura).",
+        )
+
+    def test_chat_model_answer_with_unknown_help_link_is_reduced_to_text(self):
+        fake_client = unittest.mock.Mock()
+        fake_client.models.generate_content.return_value.text = (
+            '{"mensagem":"O passo a passo está em [Como zerar a fatura](/ajuda/zerar-fatura)."}'
+        )
+        with patch("api.chat_client", return_value=fake_client):
+            response = generate_chat_message("Como zero a fatura?", "fecha_bem", None, "", self.finance_context)
+        self.assertEqual(response, "O passo a passo está em Como zerar a fatura.")
 
     def test_chat_action_request_goes_to_model_not_canned_reply(self):
         self.assertIsNone(chat_scope_response("Me passa o link mais fácil"))

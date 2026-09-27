@@ -23,6 +23,7 @@ from agent_finance import (
     contains_protected_terms,
     suggests_cutting_protected,
 )
+from central_ajuda import instrucao_central_ajuda, limpar_links_ajuda
 from data_manager_client import (
     DataManagerError,
     DataManagerNotFound,
@@ -561,15 +562,16 @@ def generate_chat_message(
         "Se o assunto estiver fora do seu foco, reconheça a pergunta com empatia em uma frase, diga com leveza que "
         "nisso você não consegue ajudar e puxe de volta com uma sugestão específica baseada nos dados do cliente. "
         "Nunca responda apenas com uma recusa. "
-        "Capacidades: você lê e explica os dados do cliente e sugere ajustes; você não executa ações. Você não envia "
-        "links, não abre telas ou sites, não indica caminhos de menu do app, não cancela, contrata ou altera "
+        "Capacidades: você lê e explica os dados do cliente e sugere ajustes; você não executa ações. Você não abre "
+        "telas ou sites, não indica caminhos de menu do app, não cancela, contrata ou altera "
         "serviços, limites ou cartões e não faz pagamentos ou transferências por esta conversa. "
         "Só diga que não consegue quando o pedido for uma dessas ações; perguntas sobre os dados, dúvidas, "
         "confirmações e pedidos de explicação você responde normalmente e, na dúvida, responde com os dados. "
-        "Quando for uma dessas ações, diga em uma frase gentil que isso você não consegue fazer por aqui, sem "
-        "inventar link ou caminho, e ofereça algo que você consegue fazer com os dados. "
-        "O próximo passo que você oferece deve ser algo que você mesma consegue fazer nesta conversa "
-        "(ex.: detalhar as assinaturas), nunca mostrar links, caminhos ou telas. "
+        "Quando for uma dessas ações, diga em uma frase gentil que isso você não faz por aqui e indique o artigo "
+        "da Central de Ajuda com o passo a passo (regra abaixo), sem descrever o passo a passo. "
+        + instrucao_central_ajuda()
+        + "O próximo passo que você oferece deve ser algo que você mesma consegue fazer nesta conversa "
+        "(ex.: detalhar as assinaturas), nunca caminhos ou telas. "
         "Retorne apenas uma resposta JSON com a chave mensagem."
     )
     if additional_instruction:
@@ -578,6 +580,8 @@ def generate_chat_message(
     config = {
         "system_instruction": system_instruction,
         "temperature": 0.4,
+        # Thinking padrão do modelo levava o llm_gen a 20-120s e estourava o timeout de 30s do BFF.
+        "thinking_config": {"thinking_level": os.getenv("CHAT_THINKING_LEVEL", "low")},
         "response_mime_type": "application/json",
         "response_schema": {
             "type": "OBJECT",
@@ -606,6 +610,10 @@ def generate_chat_message(
                     for marker in ("429", "500", "502", "503", "504", "unavailable", "timeout")
                 )
                 missing_model = "404" in error_text or "not found" in error_text
+                if "400" in error_text and "thinking_config" in config:
+                    # Modelo sem suporte a thinking_level: repete com o thinking padrão.
+                    config = {k: v for k, v in config.items() if k != "thinking_config"}
+                    continue
                 if retryable and attempt < 2:
                     time.sleep(2 ** attempt)
                     continue
@@ -620,7 +628,8 @@ def generate_chat_message(
     # Números não são mais proibidos aqui: o guardrail de saída (S07) confere cada R$ contra o tool_context.
     if suggests_cutting_protected(answer):
         return "Posso ajudar a pensar em ajustes graduais nos gastos não essenciais, sem mexer no que é importante para você."
-    return answer
+    # Só links para artigos existentes da Central de Ajuda chegam ao cliente
+    return limpar_links_ajuda(answer)
 
 
 # ---------------------------------------------------------------------------------------------- Rotinas pós-resposta (Background Tasks)
