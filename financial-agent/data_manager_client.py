@@ -1,5 +1,7 @@
 import json
 import os
+import re
+import unicodedata
 from urllib.error import HTTPError, URLError
 from urllib.parse import quote
 from urllib.request import Request as UrlRequest
@@ -88,3 +90,38 @@ def get_customer_adjustments(user_id: str, status: dict) -> list[dict]:
             raise DataManagerError("Lista de ajustes inválida no data_manager.")
         adjustments.extend(items)
     return adjustments
+
+# Roteamento da pergunta do chat para a tool mais específica do data_manager. A ordem importa:
+# o primeiro grupo que casar vence. Sem casamento, cai na visão genérica do último ano.
+CONTEXT_ROUTES: tuple[tuple[str, tuple[str, ...]], ...] = (
+    ("recorrencias", ("assinatura", "assinaturas", "streaming", "netflix", "disney", "globoplay", "paramount",
+                      "spotify", "deezer", "hbo", "prime video", "recorrente", "recorrencia", "mensalidade")),
+    ("parcelas", ("parcela", "parcelas", "parcelado", "parcelamento", "financiamento", "prestacao")),
+    ("fatura", ("fatura", "cartao")),
+    ("evolucao-saldo", ("saldo", "evolucao", "sobrou", "sobra", "negativo", "cheque especial", "limite")),
+    ("transacoes", ("lancamento", "lancamentos", "transacao", "transacoes", "compra", "compras", "o que foi",
+                    "extrato", "debito", "cobranca")),
+    ("gastos", ("gasto", "gastos", "gastei", "gastando", "categoria", "categorias", "delivery", "restaurante",
+                "lazer", "mercado", "viagem", "viagens", "loja", "despesa", "despesas")),
+)
+GENERIC_CONTEXT_ROUTE = "resumo-anual"
+
+
+def _normalize(text: str) -> str:
+    decomposed = unicodedata.normalize("NFKD", text.casefold())
+    return "".join(char for char in decomposed if not unicodedata.combining(char))
+
+
+def route_for_message(message: str) -> str:
+    normalized = _normalize(message)
+    for route, terms in CONTEXT_ROUTES:
+        if any(re.search(rf"\b{re.escape(term)}", normalized) for term in terms):
+            return route
+    return GENERIC_CONTEXT_ROUTE
+
+
+def get_customer_context(user_id: str, message: str) -> dict:
+    """Busca os dados do cliente que respondem à pergunta: tool específica ou, na falta dela, o resumo do ano."""
+    route = route_for_message(message)
+    encoded_id = quote(user_id, safe="")
+    return {"fonte": route, "dados": _get_json(f"/v1/clientes/{encoded_id}/{route}", user_id)}

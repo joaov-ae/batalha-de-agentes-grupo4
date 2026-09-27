@@ -92,25 +92,7 @@ def listar_compromissos(f: ClienteDep) -> dict[str, Any]:
     summary="Tudo que se repete no extrato: salário, contas fixas, assinaturas, financiamentos, fatura",
 )
 def listar_recorrencias(f: ClienteDep) -> dict[str, Any]:
-    itens = sorted(f.itens, key=lambda i: (i.tipo, i.tipo_item, -i.valor_previsto))
-    return {
-        "id_usuario": f.id_usuario,
-        "renda_mensal": f.renda_mensal,
-        "itens": [
-            {
-                "chave": i.chave,
-                "tipo": "entrada" if i.tipo == "E" else "saida",
-                "tipo_item": i.tipo_item,
-                "descricao": i.descricao,
-                "dia_tipico": i.dia_tipico,
-                "valor_mensal": i.valor_previsto,
-                "grupo_assinatura": i.grupo_assinatura,
-                "parcelas_restantes": i.parcelas_restantes,
-            }
-            for i in itens
-            if not (i.parcelas_restantes is not None and i.parcelas_restantes <= 0)
-        ],
-    }
+    return servicos.recorrencias(f)
 
 
 @router.get(

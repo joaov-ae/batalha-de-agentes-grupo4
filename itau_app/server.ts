@@ -98,7 +98,8 @@ app.post('/api/gemini/chat', async (req: Request, res: Response) => {
             message: prompt,
             session_id: sessionId || undefined,
           }),
-          signal: AbortSignal.timeout(6000),
+          // 12s: o agente busca dados no data_manager + validação de guardrails
+          signal: AbortSignal.timeout(12000),
         });
 
         if (agentRes.ok) {
@@ -165,7 +166,8 @@ app.post('/api/gemini/chat', async (req: Request, res: Response) => {
           message: prompt,
           session_id: sessionId || undefined,
         }),
-        signal: AbortSignal.timeout(8000),
+        // 12s: o agente agora também busca os dados do cliente no data_manager antes do LLM
+        signal: AbortSignal.timeout(12000),
       });
 
       if (agentRes.ok) {

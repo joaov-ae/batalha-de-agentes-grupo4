@@ -431,3 +431,9 @@ O ADC da máquina faz impersonation de `cognitor-runtime@cognitor-joaovae.iam.gs
    - As ações são simuladas.
    - A memória não persiste.
    - Firestore e Scheduler estão bloqueados no projeto.
+
+## Adendo 2026-09-27: rota genérica `GET /v1/clientes/{id}/resumo-anual`
+- Fallback do chat quando nenhuma tool específica responde. É um agregado dos últimos 12 meses: `meses` (reusa `evolucao_saldo`, meses=11), `categorias` (`resumo_anual_categorias.sql`), `principais_gastos` (top 15, `resumo_anual_estabelecimentos.sql`), `recorrencias` e `ultimas_transacoes` (20), com campos `formatado`.
+- As 4 consultas rodam em paralelo, com cache em memória de 10 min por cliente. Medido para a Renata: ~1,1 s sem cache e ~20 mil caracteres.
+- A lógica de `/recorrencias` foi para `servicos.recorrencias`, e cada item ganhou `formatado.valor_mensal` (campo novo, sem quebrar o contrato).
+- Os valores atuais das assinaturas da Renata (Disney+ R$ 41,28, Globoplay R$ 40,88, Paramount+ R$ 25,91) somam os R$ 108,07 exibidos na demo.

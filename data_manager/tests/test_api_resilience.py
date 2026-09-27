@@ -129,3 +129,58 @@ def test_api_novas_rotas_enriquecidas():
         app.dependency_overrides.clear()
 
 
+
+
+def test_resumo_anual_agrega_blocos_formata_e_usa_cache():
+    from app import servicos
+    from app.deps import cliente as dep_cliente
+
+    uid = "11111111-2222-3333-4444-555555555556"
+    dummy_features = Features(
+        id_usuario=uid,
+        data_referencia=date(2025, 12, 15),
+        saldo_hoje=1000.0,
+        itens=(
+            ItemRecorrente("salario", "E", "salario", "salario", "salario", 7, 5000.0, date(2025, 12, 7), True),
+            ItemRecorrente("disney", "S", "assinatura", "disney plus", "Assinaturas", 8, 27.22, date(2025, 12, 8), True, grupo_assinatura="video"),
+        ),
+        saida_variavel_diaria=0.0,
+    )
+    respostas = {
+        "evolucao_saldo": [{"mes": date(2025, 12, 1), "saldo_fim": 800.0}],
+        "resumo_anual_categorias": [
+            {"categoria": "Assinaturas", "total_12m": 955.21, "media_mensal": 79.6, "gasto_mes_atual": 111.69,
+             "lancamentos": 36, "via_fatura": False},
+        ],
+        "resumo_anual_estabelecimentos": [
+            {"descricao": "assin disney plus", "categoria": "Assinaturas", "servico_assinatura": "disney plus",
+             "grupo_assinatura": "video", "vezes": 12, "total_12m": 326.64, "valor_medio": 27.22,
+             "ultima_data": date(2025, 12, 8)},
+        ],
+        "ultimas_transacoes": [{"data": date(2025, 12, 15), "descricao": "pix", "valor": 10.0}],
+    }
+    chamadas = []
+
+    def fake_run_file(nome, **params):
+        chamadas.append(nome)
+        return respostas.get(nome, [])
+
+    servicos._resumo_anual_cache.clear()
+    app.dependency_overrides[dep_cliente] = lambda: dummy_features
+    try:
+        with patch("app.bq.run_file", side_effect=fake_run_file), TestClient(app) as client:
+            r = client.get(f"/v1/clientes/{uid}/resumo-anual")
+            assert r.status_code == 200
+            data = r.json()
+            assert data["periodo_meses"] == 12
+            assert data["categorias"][0]["formatado"]["media_mensal"] == "R$ 79,60"
+            assert data["principais_gastos"][0]["servico_assinatura"] == "disney plus"
+            assinatura = next(i for i in data["recorrencias"] if i["grupo_assinatura"] == "video")
+            assert assinatura["formatado"]["valor_mensal"] == "R$ 27,22"
+            assert data["formatado"]["total_saidas_12m"] == "R$ 955,21"
+
+            assert client.get(f"/v1/clientes/{uid}/resumo-anual").status_code == 200
+            assert len([c for c in chamadas if c in respostas]) == 4  # segunda chamada veio do cache
+    finally:
+        app.dependency_overrides.clear()
+        servicos._resumo_anual_cache.clear()

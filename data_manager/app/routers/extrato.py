@@ -55,6 +55,17 @@ def ultimas_transacoes(
 
 
 @router.get(
+    "/resumo-anual",
+    operation_id="resumo_anual",
+    summary="Visão genérica dos últimos 12 meses (fallback quando nenhuma tool específica responde)",
+    description="Agregado para o LLM: saldo mês a mês, gasto por categoria, principais gastos, recorrências e "
+    "últimos lançamentos. Campos formatado trazem os valores prontos em R$.",
+)
+def resumo_anual(f: ClienteDep) -> dict[str, Any]:
+    return servicos.resumo_anual(f)
+
+
+@router.get(
     "/custo-limite",
     operation_id="custo_do_limite",
     summary="Juros de limite pagos no ano e juros estimados se entrar no limite até o salário",

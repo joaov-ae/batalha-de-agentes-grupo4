@@ -54,3 +54,13 @@ O `financial-agent` é a API de recomendação e otimização financeira do Grup
 - **Tolerância a Cold Start nos Guardrails**: Timeout ampliado para 6s (configurável via `GUARDRAILS_TIMEOUT_SECONDS`) para evitar erros 503 falsos na inicialização de containers frios.
 - **Resiliência Local**: Clientes de guardrails, data_manager e observabilidade ignoram a busca de `id_token` do GCP quando conectados a URLs locais (`localhost` / `127.0.0.1`).
 - **Deploy Automatizado**: Script [deploy.sh](file:///Users/joaovae/Documents/repositories/batalha-de-agentes-grupo4/financial-agent/deploy.sh) com injeção automática de `DATA_MANAGER_URL`, `GUARDRAILS_URL` e `OBSERVABILIDADE_URL`.
+
+## 8. Chat com dados reais e redirecionamento suave (2026-09-27)
+Motivação: em `_agent_context/resposta_demo/`, "Entendi" recebia um corte seco por palavra-chave, e "Que assinaturas?" não conseguia nomear os serviços porque o chat não recebia dados e proibia números.
+- **Roteamento de contexto** (`data_manager_client.route_for_message` / `get_customer_context`): a pergunta vai para a tool específica (`/recorrencias`, `/parcelas`, `/fatura`, `/evolucao-saldo`, `/transacoes`, `/gastos`). Sem intenção reconhecida, cai na genérica **`/resumo-anual`**. A busca roda em paralelo com o guardrail de entrada e o snapshot. Se falhar, o chat degrada (responde sem dados) em vez de devolver 503.
+- **Números liberados só quando vêm do contexto**: saiu a proibição local de dígitos, R$, % e nomes de serviços, e os dados entram no `tool_context` (`contexto`) do guardrail de saída para a **S07** conferir cada R$. O prompt manda copiar o campo `formatado` e não calcular valores novos.
+- **Termos protegidos no chat**: `suggests_cutting_protected` (termo essencial + verbo de corte na mesma frase) substitui `contains_protected_terms` no chat. Citar moradia ou educação como fato é permitido; sugerir corte nesses itens, não. O `/savings` mantém a regra antiga.
+- **Escopo**: `chat_scope_response` só desvia investimentos, com texto acolhedor e convite de volta. O resto vai ao LLM, que redireciona com suavidade e sempre oferece um próximo passo. Temperatura 0,2 → 0,4.
+- Correção: o retry de tom agora repassa o `estado` e os dados (antes lia `tool_context["estado"]`, que não existe).
+- **Limitação conhecida da S07**: ela aceita qualquer valor a até R$ 1 (ou 1%) de *algum* número do contexto. Com o resumo anual (~270 números), um valor inventado pode coincidir (ex.: R$ 59,90 ≈ R$ 59,76). Valores fora dessas faixas são barrados.
+- Testes: 50 no financial-agent.

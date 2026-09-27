@@ -1,8 +1,11 @@
 """Regras de montagem das respostas: junta engine, stores e formatação. As rotas só chamam daqui."""
 
+import time
+from concurrent.futures import ThreadPoolExecutor
 from datetime import date, timedelta
 from typing import Any
 
+from app import bq
 from app import formatar as fmt
 from app.engine.ajustes import gerar_ajustes
 from app.engine.classificacao import calcular_status
@@ -118,6 +121,78 @@ def compromissos(f: Features) -> dict[str, Any]:
             for e in eventos
         ],
     }
+
+
+def recorrencias(f: Features) -> dict[str, Any]:
+    itens = sorted(f.itens, key=lambda i: (i.tipo, i.tipo_item, -i.valor_previsto))
+    return {
+        "id_usuario": f.id_usuario,
+        "renda_mensal": f.renda_mensal,
+        "itens": [
+            {
+                "chave": i.chave,
+                "tipo": "entrada" if i.tipo == "E" else "saida",
+                "tipo_item": i.tipo_item,
+                "descricao": i.descricao,
+                "dia_tipico": i.dia_tipico,
+                "valor_mensal": i.valor_previsto,
+                "grupo_assinatura": i.grupo_assinatura,
+                "parcelas_restantes": i.parcelas_restantes,
+                "formatado": {"valor_mensal": fmt.brl(i.valor_previsto)},
+            }
+            for i in itens
+            if not (i.parcelas_restantes is not None and i.parcelas_restantes <= 0)
+        ],
+    }
+
+
+RESUMO_ANUAL_TTL_S = 600
+_resumo_anual_cache: dict[str, tuple[float, dict[str, Any]]] = {}
+
+
+def resumo_anual(f: Features) -> dict[str, Any]:
+    """Visão genérica dos últimos 12 meses, para perguntas que nenhuma tool específica cobre.
+
+    Agregado (não o extrato bruto) para caber no prompt. Cache em memória: os dados só mudam quando o pipeline roda.
+    """
+    agora = time.monotonic()
+    em_cache = _resumo_anual_cache.get(f.id_usuario)
+    if em_cache and agora - em_cache[0] < RESUMO_ANUAL_TTL_S:
+        return em_cache[1]
+
+    uid = f.id_usuario
+    with ThreadPoolExecutor(max_workers=4) as pool:
+        meses = pool.submit(bq.run_file, "evolucao_saldo", id_usuario=uid, meses=11)
+        categorias = pool.submit(bq.run_file, "resumo_anual_categorias", id_usuario=uid)
+        estabelecimentos = pool.submit(bq.run_file, "resumo_anual_estabelecimentos", id_usuario=uid, limite=15)
+        ultimas = pool.submit(bq.run_file, "ultimas_transacoes", id_usuario=uid, categoria="", limite=20)
+        linhas_categorias = categorias.result()
+        resultado = {
+            "id_usuario": uid,
+            "periodo_meses": 12,
+            "data_referencia": f.data_referencia,
+            "renda_mensal": f.renda_mensal,
+            "saldo_hoje": f.saldo_hoje,
+            "meses": meses.result(),
+            "categorias": [
+                {**c, "formatado": {"total_12m": fmt.brl(c["total_12m"]), "media_mensal": fmt.brl(c["media_mensal"]),
+                                    "gasto_mes_atual": fmt.brl(c["gasto_mes_atual"])}}
+                for c in linhas_categorias
+            ],
+            "principais_gastos": [
+                {**e, "formatado": {"total_12m": fmt.brl(e["total_12m"]), "valor_medio": fmt.brl(e["valor_medio"])}}
+                for e in estabelecimentos.result()
+            ],
+            "recorrencias": recorrencias(f)["itens"],
+            "ultimas_transacoes": ultimas.result(),
+            "formatado": {
+                "renda_mensal": fmt.brl(f.renda_mensal),
+                "saldo_hoje": fmt.brl(f.saldo_hoje),
+                "total_saidas_12m": fmt.brl(round(sum(c["total_12m"] for c in linhas_categorias), 2)),
+            },
+        }
+    _resumo_anual_cache[f.id_usuario] = (agora, resultado)
+    return resultado
 
 
 def ritmo_do_mes(f: Features, store: BigQueryStatusStore) -> dict[str, Any]:

@@ -188,6 +188,20 @@ def contains_protected_terms(value: str) -> bool:
     return any(re.search(rf"\b{re.escape(term)}\b", normalized) for term in PROTECTED_TERMS)
 
 
+CUT_VERBS = re.compile(
+    r"\b(?:cort\w*|reduz\w*|reducao|diminu\w*|cancel\w*|elimin\w*|suspend\w*|zer\w*|abrir mao|abra mao|"
+    r"economiz\w*|enxug\w*)\b"
+)
+
+
+def suggests_cutting_protected(value: str) -> bool:
+    """Conversa pode citar gasto essencial como fato; o que não pode é sugerir corte nele na mesma frase."""
+    for sentence in re.split(r"[.!?;\n]+", normalize_label(value)):
+        if contains_protected_terms(sentence) and CUT_VERBS.search(sentence):
+            return True
+    return False
+
+
 def format_brl(value: float) -> str:
     formatted = f"{abs(value):,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
     prefix = "-" if value < 0 else ""

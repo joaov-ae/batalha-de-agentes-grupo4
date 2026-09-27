@@ -33,7 +33,9 @@ from data_manager_client import (
     DataManagerNotFound,
     DataManagerUnavailable,
     get_customer_adjustments,
+    get_customer_context,
     get_customer_snapshot,
+    route_for_message,
 )
 from guardrails_client import GuardrailsUnavailable
 
@@ -62,6 +64,14 @@ class FinanceContextTests(unittest.TestCase):
         self.addCleanup(self.output_patch.stop)
         self.addCleanup(self.agent_entry_patch.stop)
         self.addCleanup(self.agent_output_patch.stop)
+        self.finance_context = {
+            "fonte": "recorrencias",
+            "dados": {"itens": [{"descricao": "assin disney plus", "valor_mensal": 41.28,
+                                 "formatado": {"valor_mensal": "R$ 41,28"}}]},
+        }
+        self.context_patch = patch("api.get_customer_context", return_value=self.finance_context)
+        self.context_mock = self.context_patch.start()
+        self.addCleanup(self.context_patch.stop)
         self.demo_headers = {"X-Demo-Access-Key": self.DEMO_KEY}
         key_patch = patch.dict("os.environ", {"DEMO_ACCESS_TOKEN": self.DEMO_KEY, "OBSERVABILIDADE_ENABLED": "false"})
         key_patch.start()
@@ -327,21 +337,34 @@ class FinanceContextTests(unittest.TestCase):
             verify_finance_user("user-1", None)
         self.assertEqual(raised.exception.status_code, 401)
 
-    def test_chat_scope_defers_investments_and_refuses_unrelated_topics(self):
-        self.assertIn("fluxo de caixa", chat_scope_response("Quais ações devo comprar?"))
-        self.assertIn("organização do orçamento", chat_scope_response("Me ajuda com receita de bolo?"))
+    def test_chat_scope_only_defers_investments_and_lets_llm_handle_the_rest(self):
+        self.assertIn("investimentos", chat_scope_response("Quais ações devo comprar?"))
+        self.assertIsNone(chat_scope_response("Me ajuda com receita de bolo?"))
+        self.assertIsNone(chat_scope_response("Entendi"))
         self.assertIsNone(chat_scope_response("Como posso economizar no Delivery?"))
 
-    def test_chat_returns_out_of_scope_reply_without_calling_model(self):
+    def test_chat_returns_investment_redirect_without_calling_model(self):
         client = TestClient(app)
         snapshot = {"status": {"estado": "fecha_bem", "encaminhar_atendimento": False, "data_referencia": "2025-12-15"}, "ritmo": {}}
         with patch.dict("os.environ", {"DEMO_MODE": "true"}), patch(
             "api.get_customer_snapshot", return_value=snapshot
         ), patch("api.generate_chat_message") as generate:
-            response = client.post("/chat", json={"user_id": self.demo_user_id, "message": "me diga uma piada"}, headers=self.demo_headers)
+            response = client.post("/chat", json={"user_id": self.demo_user_id, "message": "Onde investir?"}, headers=self.demo_headers)
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.json()["status"], "fora_escopo")
+        self.assertIn("Quer que eu mostre", response.json()["mensagem"])
         generate.assert_not_called()
+
+    def test_chat_small_talk_goes_to_model_with_history_instead_of_canned_reply(self):
+        client = TestClient(app)
+        snapshot = {"status": {"estado": "fecha_bem", "encaminhar_atendimento": False, "data_referencia": "2025-12-15"}, "ritmo": {}}
+        with patch.dict("os.environ", {"DEMO_MODE": "true"}), patch(
+            "api.get_customer_snapshot", return_value=snapshot
+        ), patch("api.generate_chat_message", return_value="Que bom! Quer revisar suas assinaturas?") as generate:
+            response = client.post("/chat", json={"user_id": self.demo_user_id, "message": "Entendi"}, headers=self.demo_headers)
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["status"], "respondido")
+        self.assertEqual(generate.call_args.args[4], self.finance_context)
 
     def test_chat_guardrails_block_entry_before_llm(self):
         client = TestClient(app)
@@ -536,13 +559,63 @@ class FinanceContextTests(unittest.TestCase):
             }, headers=self.demo_headers)
         self.assertEqual(response.status_code, 404)
 
-    def test_chat_replaces_numeric_model_claims_with_safe_text(self):
+    def test_chat_keeps_values_from_context_and_sends_data_in_prompt(self):
         fake_client = unittest.mock.Mock()
-        fake_client.models.generate_content.return_value.text = '{"mensagem":"Delivery subiu 10 por cento."}'
+        fake_client.models.generate_content.return_value.text = (
+            '{"mensagem":"Você assina Disney Plus por R$ 41,28 por mês. Quer revisar?"}'
+        )
         with patch("api.chat_client", return_value=fake_client):
-            response = generate_chat_message("Como rever meus gastos com Delivery?")
-        self.assertNotIn("10", response)
-        self.assertIn("ajustes graduais", response)
+            response = generate_chat_message("Que assinaturas?", "fecha_bem", None, "", self.finance_context)
+        self.assertIn("R$ 41,28", response)
+        prompt = fake_client.models.generate_content.call_args.kwargs["contents"]
+        self.assertIn("DADOS DO CLIENTE (fonte: data_manager /recorrencias)", prompt)
+        self.assertIn("R$ 41,28", prompt)
+
+    def test_chat_allows_citing_essentials_but_blocks_suggesting_cuts_on_them(self):
+        fake_client = unittest.mock.Mock()
+        with patch("api.chat_client", return_value=fake_client):
+            fake_client.models.generate_content.return_value.text = (
+                '{"mensagem":"Seus maiores gastos fixos são moradia e educação. Quer olhar o delivery?"}'
+            )
+            self.assertIn("educação", generate_chat_message("Para onde vai meu dinheiro?"))
+            fake_client.models.generate_content.return_value.text = '{"mensagem":"Você pode reduzir a educação."}'
+            self.assertIn("ajustes graduais", generate_chat_message("Onde cortar?"))
+
+    def test_chat_sends_context_to_output_guardrail_for_value_check(self):
+        client = TestClient(app)
+        snapshot = {"status": {"estado": "fecha_bem", "encaminhar_atendimento": False, "data_referencia": "2025-12-15"}, "ritmo": {}}
+        with patch.dict("os.environ", {"DEMO_MODE": "true"}), patch(
+            "api.get_customer_snapshot", return_value=snapshot
+        ), patch("api.generate_chat_message", return_value="Disney Plus custa R$ 41,28."):
+            client.post("/chat", json={"user_id": self.demo_user_id, "message": "Que assinaturas?"}, headers=self.demo_headers)
+        import api
+        tool_context = api.check_output.call_args.args[2]
+        self.assertEqual(tool_context["contexto"], self.finance_context)
+
+    def test_chat_degrades_without_data_when_context_lookup_fails(self):
+        self.context_mock.side_effect = DataManagerUnavailable("fora")
+        client = TestClient(app)
+        snapshot = {"status": {"estado": "fecha_bem", "encaminhar_atendimento": False, "data_referencia": "2025-12-15"}, "ritmo": {}}
+        with patch.dict("os.environ", {"DEMO_MODE": "true"}), patch(
+            "api.get_customer_snapshot", return_value=snapshot
+        ), patch("api.generate_chat_message", return_value="Posso ajudar a rever seus gastos.") as generate:
+            response = client.post("/chat", json={"user_id": self.demo_user_id, "message": "Oi"}, headers=self.demo_headers)
+        self.assertEqual(response.status_code, 200)
+        self.assertIsNone(generate.call_args.args[4])
+
+    def test_context_routing_picks_specific_tool_or_generic_year_summary(self):
+        self.assertEqual(route_for_message("Que assinaturas?"), "recorrencias")
+        self.assertEqual(route_for_message("Quanto gastei com delivery?"), "gastos")
+        self.assertEqual(route_for_message("Como está minha fatura do cartão?"), "fatura")
+        self.assertEqual(route_for_message("Quantas parcelas faltam?"), "parcelas")
+        self.assertEqual(route_for_message("Entendi"), "resumo-anual")
+        self.assertEqual(route_for_message("Me conta como foi meu ano"), "resumo-anual")
+
+    def test_get_customer_context_calls_routed_data_manager_path(self):
+        with patch("data_manager_client._get_json", return_value={"id_usuario": "u-1"}) as get_json:
+            result = get_customer_context("u-1", "Entendi")
+        get_json.assert_called_once_with("/v1/clientes/u-1/resumo-anual", "u-1")
+        self.assertEqual(result["fonte"], "resumo-anual")
 
     def test_chat_retries_transient_model_unavailability(self):
         fake_client = unittest.mock.Mock()
