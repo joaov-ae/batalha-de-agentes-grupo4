@@ -27,3 +27,13 @@ Thumbs.db
 *.log
 tmp/
 temp/
+
+# Ambientes Python e caches
+.venv/
+venv/
+ENV/
+__pycache__/
+*.py[cod]
+*$py.class
+.ipynb_checkpoints/
+
