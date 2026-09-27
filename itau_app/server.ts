@@ -150,15 +150,6 @@ app.post(['/api/gemini/chat', '/api/agent/chat'], async (req: Request, res: Resp
     }
 
     // Modo JSON tradicional
-    const agentUrl = FINANCIAL_AGENT_URL.replace(/\/$/, '');
-    const token = await getIdToken(agentUrl);
-    const headers: Record<string, string> = {
-      'Content-Type': 'application/json',
-      'X-Demo-Access-Key': 'demo-hackathon-key',
-    };
-    if (token) headers['Authorization'] = `Bearer ${token}`;
-    if (sessionId) headers['X-Session-ID'] = String(sessionId);
-
     const agentRes = await fetch(`${agentUrl}/chat`, {
       method: 'POST',
       headers,

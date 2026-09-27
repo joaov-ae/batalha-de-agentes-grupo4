@@ -797,9 +797,9 @@ class FinanceContextTests(unittest.TestCase):
             self.assertIsNone(chat_scope_response(greeting), f"Falhou para saudação: {greeting}")
 
     def test_chat_scope_redirection_is_warm_calm_and_not_bossy(self):
-        reply = chat_scope_response("Me ajuda com receita de bolo?")
+        reply = chat_scope_response("Onde investir minhas economias?")
         self.assertIsNotNone(reply)
-        self.assertIn("organização do orçamento", reply)
+        self.assertIn("investimentos", reply)
         # Não deve conter ordens rudes como 'manter a conversa nesse foco' ou 'sem sair desse foco'
         self.assertNotIn("nesse foco", reply)
         self.assertNotIn("sem sair desse foco", reply)
