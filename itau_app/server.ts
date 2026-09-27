@@ -62,13 +62,50 @@ Responda sempre em português brasileiro de forma clara e objetiva, chamando a c
 
 app.post('/api/gemini/chat', async (req: Request, res: Response) => {
   try {
-    const { messages, userMessage } = req.body;
+    const { messages, userMessage, sessionId } = req.body;
 
     // Build chat contents
     const prompt = userMessage || (messages && messages[messages.length - 1]?.text) || 'Olá Ia.i!';
-
     const perfil = await montarPerfilCliente();
 
+    // 1. Tenta delegar para o Financial Agent oficial (orquestrador com Guardrails + Juiz de Tom)
+    try {
+      const agentUrl = FINANCIAL_AGENT_URL.replace(/\/$/, '');
+      const token = await getIdToken(agentUrl);
+      const headers: Record<string, string> = {
+        'Content-Type': 'application/json',
+        'X-Demo-Access-Key': 'demo-hackathon-key',
+      };
+      if (token) headers['Authorization'] = `Bearer ${token}`;
+      if (sessionId) headers['X-Session-ID'] = String(sessionId);
+
+      const agentRes = await fetch(`${agentUrl}/chat`, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({
+          user_id: perfil.idUsuario,
+          message: prompt,
+          session_id: sessionId || undefined,
+        }),
+        signal: AbortSignal.timeout(8000),
+      });
+
+      if (agentRes.ok) {
+        const agentData = await agentRes.json();
+        if (agentData?.mensagem) {
+          return res.json({
+            text: agentData.mensagem,
+            status: agentData.status,
+            sessionId: agentData.session_id,
+            origem: 'financial_agent',
+          });
+        }
+      }
+    } catch (agentErr) {
+      console.warn('Financial Agent indisponível ou timeout, ativando fallback local:', agentErr instanceof Error ? agentErr.message : agentErr);
+    }
+
+    // 2. Fallback resiliente: Gemini local no BFF
     if (!geminiEnabled) {
       // Sem Gemini (ex.: rodando local sem credenciais): resposta de exemplo com os números reais do perfil
       return res.json({
@@ -76,6 +113,7 @@ app.post('/api/gemini/chat', async (req: Request, res: Response) => {
           `Olá, ${perfil.primeiroNome}! Sou a **ia.i**. Sua renda recorrente é de **${fmtBRL(perfil.renda.mensal)}** e as despesas fixas somam ` +
           `**${fmtBRL(perfil.fixas.total)}** (${perfil.fixas.percentualRenda.toFixed(1)}%). Sobram ${fmtBRL(perfil.sobraAposFixas)} para o resto do mês. ` +
           `Como posso te ajudar a programar os gastos?`,
+        origem: 'exemplo_local',
       });
     }
 
@@ -89,8 +127,8 @@ app.post('/api/gemini/chat', async (req: Request, res: Response) => {
       },
     });
 
-    const replyText = response.text || 'Desculpe, tive uma oscilação momentânea. Como posso ajudar com seus investimentos Itaú?';
-    return res.json({ text: replyText });
+    const replyText = response.text || 'Desculpe, tive uma oscilação momentânea. Como posso ajudar com a organização do seu orçamento?';
+    return res.json({ text: replyText, origem: 'gemini_fallback' });
   } catch (error) {
     console.error('Error in /api/gemini/chat:', error);
     return res.status(500).json({
@@ -597,6 +635,7 @@ app.get('/api/pix/saldo', async (_req: Request, res: Response) => {
 // aqui só se monta a resposta da jornada. O LLM não calcula nenhum valor em R$.
 // Sem acesso ao data_manager (ex.: rodando local), usa a cópia em data/plano-salario-snapshot.json.
 const DATA_MANAGER_URL = process.env.DATA_MANAGER_URL || 'https://data-manager-itau-zqj7scngrq-uc.a.run.app';
+const FINANCIAL_AGENT_URL = process.env.FINANCIAL_AGENT_URL || 'https://financial-agent-313377205892.us-central1.run.app';
 const PLANO_SNAPSHOT = JSON.parse(fs.readFileSync(path.resolve('data/plano-salario-snapshot.json'), 'utf8'));
 
 // Nomes amigáveis para as descrições do extrato sintético
@@ -636,10 +675,11 @@ const dataCurta = (iso: string) => `${iso.slice(8, 10)}/${iso.slice(5, 7)}`;
 const diaNum = (iso: string) => Number(iso.slice(8, 10));
 const round2 = (v: number) => Math.round(v * 100) / 100;
 
-// Token de identidade para chamar o data_manager (serviço privado; a SA tem roles/run.invoker)
-let cachedIdToken: { value: string | null; expires: number } | null = null;
+// Token de identidade para chamar serviços Cloud Run privados (data_manager, financial-agent)
+const cachedIdTokens: Record<string, { value: string | null; expires: number }> = {};
 async function getIdToken(audience: string): Promise<string | null> {
-  if (cachedIdToken && cachedIdToken.expires > Date.now()) return cachedIdToken.value;
+  const cached = cachedIdTokens[audience];
+  if (cached && cached.expires > Date.now()) return cached.value;
   let value: string | null = null;
   try {
     const res = await fetch(
@@ -650,7 +690,7 @@ async function getIdToken(audience: string): Promise<string | null> {
   } catch {
     value = null;
   }
-  cachedIdToken = { value, expires: Date.now() + (value ? 45 : 5) * 60 * 1000 };
+  cachedIdTokens[audience] = { value, expires: Date.now() + (value ? 45 : 5) * 60 * 1000 };
   return value;
 }
 
