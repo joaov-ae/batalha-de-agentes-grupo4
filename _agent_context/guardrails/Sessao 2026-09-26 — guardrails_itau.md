@@ -21,16 +21,14 @@ requisição e rodando no Cloud Run como o `data_manager`.
 - `deploy.sh` cria o template do Model Armor e sobe `guardrails-itau` autenticado.
 
 ## Medições
-- Regras: ~0,2–1 ms por mensagem (teste de p95 < 10 ms).
-- `gemini-2.5-flash-lite` (a partir do Brasil): 1ª chamada ~1,4 s (TLS + token); depois ~500–850 ms.
-  `gemini-2.0-flash-lite` não está disponível no projeto (404).
-- Cancelar a chamada no timeout derrubava a conexão e todas as seguintes estouravam. Correções: aquecer as
-  conexões no `lifespan` e não cancelar a tarefa atrasada (termina em segundo plano). Timeout padrão
-  ajustado de 800 para 1200 ms.
-- Por isso a recomendação é o orquestrador chamar `/v1/entrada` **em paralelo** com a geração do LLM.
+- Regras: ~0,1–0,7 ms por mensagem (p95 < 10 ms).
+- `gemini-2.5-flash-lite`: ~450–750 ms (Vertex AI `us-central1`).
+- Model Armor: dispensado devido a restrições de permissões IAM no projeto GCP; filtros de conteúdo nocivo (E10/S09) absorvidos pelo Gemini.
+- Serviço Cloud Run (`guardrails-itau`): publicado em `https://guardrails-itau-zqj7scngrq-uc.a.run.app` com autenticação obrigatória via `squad-agent-sa`.
+- Comparativo com agente (`financial-agent`): agente leva 500 ms a 42 s por resposta; o guardrail de entrada em paralelo custa ~0 ms percebidos e o de saída em modo suspeito custa < 1 ms.
 
-## Pendências
-- Pedir `roles/aiplatform.user` e `roles/modelarmor.user` para `squad-agent-sa` e rodar `./deploy.sh`.
-- Model Armor não testado ao vivo (template ainda não criado); mapeamento validado com objetos do SDK.
-- Imagem Docker não buildada localmente (daemon parado); Dockerfile igual ao do data_manager.
-- Integrar no agente (exemplo de código no README).
+## Concluído
+- Imagem Docker buildada e deployed com sucesso via Cloud Build / Cloud Run.
+- Permissão `roles/run.invoker` concedida à SA `squad-agent-sa`.
+- Testes ponta a ponta executados e validados contra os serviços ao vivo no Cloud Run.
+- 72 testes unitários e de integração passando localmente.
