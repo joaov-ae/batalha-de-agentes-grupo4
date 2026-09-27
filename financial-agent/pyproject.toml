@@ -1,0 +1,6 @@
+[tool.ruff]
+line-length = 120
+target-version = "py312"
+
+[tool.ruff.lint.isort]
+known-first-party = ["agent_finance", "api", "data_manager_client", "guardrails_client"]

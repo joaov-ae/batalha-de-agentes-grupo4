@@ -34,6 +34,15 @@ O `financial-agent` é a API de recomendação e otimização financeira do Grup
 - **Propagação**: Repassa o `session_id` nos headers de resposta (`Access-Control-Expose-Headers`), nas chamadas HTTP para o serviço de guardrails e nos logs estruturados de auditoria (`session_id=...`).
 
 ## 5. Testes e Qualidade
-- Suíte de testes automatizados com 37 testes cobrindo todos os fluxos críticos, guardrails, fallbacks e propagação de rastreamento.
+- Suíte de testes automatizados com 40 testes cobrindo todos os fluxos críticos, guardrails, fallbacks, usuários de demonstração e inicialização ADC.
 - Totalmente compatível com execução na raiz do monorepo e dentro do diretório `financial-agent/`.
-- Verificado e aprovado com Ruff linter.
+- Verificado e 100% aprovado com Ruff linter e formatação isort padronizada (`pyproject.toml`).
+
+## 6. Blindagem de Produção e Demonstração
+- **Vertex AI ADC no Cloud Run**: `vertex_ai_enabled()` detecta automaticamente o ambiente Cloud Run via `K_SERVICE` na ausência de chaves estáticas, utilizando a quota e autenticação da SA `squad-agent-sa` via Application Default Credentials (ADC).
+- **Allowlist de Demonstração Expandida**: `DEFAULT_DEMO_USERS` inclui os perfis oficiais da demo:
+  - `5865ce27-0681-4dcc-9475-3df9d15a6858` (Renata Lopes - app principal)
+  - `139aae21-0535-4a19-bbf2-d2b8f0c7a0d8` (Maria - extrato real)
+  - `d6c59567-c0e0-4966-ba09-883eb6d859e2` (Maria - projeção negativa)
+- **Tolerância a Cold Start nos Guardrails**: Timeout ampliado para 6s (configurável via `GUARDRAILS_TIMEOUT_SECONDS`) para evitar erros 503 falsos na inicialização de containers frios.
+- **Resiliência Local**: Clientes de guardrails e data_manager ignoram a busca de `id_token` do GCP quando conectados a URLs locais (`localhost` / `127.0.0.1`).

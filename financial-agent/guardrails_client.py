@@ -15,25 +15,35 @@ def service_url() -> str:
     return os.getenv("GUARDRAILS_URL", "https://guardrails-itau-zqj7scngrq-uc.a.run.app").rstrip("/")
 
 
+def guardrails_timeout() -> float:
+    try:
+        return float(os.getenv("GUARDRAILS_TIMEOUT_SECONDS", "6"))
+    except ValueError:
+        return 6.0
+
+
 def _post_json(path: str, payload: dict) -> dict:
     base = service_url()
-    try:
-        token = id_token.fetch_id_token(GoogleAuthRequest(), base)
-    except Exception as exc:
-        raise GuardrailsUnavailable("Não foi possível autenticar no serviço de guardrails.") from exc
+    headers = {
+        "Content-Type": "application/json",
+        "Accept": "application/json",
+    }
+    if not base.startswith(("http://localhost", "http://127.0.0.1")):
+        try:
+            token = id_token.fetch_id_token(GoogleAuthRequest(), base)
+            headers["Authorization"] = f"Bearer {token}"
+        except Exception as exc:
+            raise GuardrailsUnavailable("Não foi possível autenticar no serviço de guardrails.") from exc
 
     request = Request(
         f"{base}{path}",
         data=json.dumps(payload, ensure_ascii=False).encode("utf-8"),
-        headers={
-            "Authorization": f"Bearer {token}",
-            "Content-Type": "application/json",
-            "Accept": "application/json",
-        },
+        headers=headers,
         method="POST",
     )
+    timeout = guardrails_timeout()
     try:
-        with urlopen(request, timeout=3) as response:
+        with urlopen(request, timeout=timeout) as response:
             verdict = json.loads(response.read())
     except HTTPError as exc:
         raise GuardrailsUnavailable(f"Guardrails retornou HTTP {exc.code}.") from exc

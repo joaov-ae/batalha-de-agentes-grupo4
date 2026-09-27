@@ -14,8 +14,9 @@ from zoneinfo import ZoneInfo
 from dotenv import load_dotenv
 from google import genai
 from google.cloud import bigquery
-from guardrails_client import GuardrailsUnavailable, check_input, check_output
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
+
+from guardrails_client import GuardrailsUnavailable, check_input, check_output
 
 load_dotenv(Path(__file__).resolve().parent / ".env")
 
@@ -136,7 +137,7 @@ def vertex_ai_enabled() -> bool:
         return enterprise
     if vertex is not None:
         return vertex
-    return False
+    return bool(os.getenv("K_SERVICE") and not any(os.getenv(k) for k in ("GEMINI_API_KEY", "GOOGLE_API_KEY", "API_KEY", "key")))
 
 
 def gcp_project() -> str:
@@ -646,7 +647,7 @@ def extract_json_from_text(text: str) -> dict:
 
 
 def gerar_plano_otimizacao(json_contexto: dict, user_id: str = "default_user") -> dict:
-    client = genai.Client(api_key=load_api_key())
+    client = build_genai_client()
     
     # Validação de entrada (Guardrails)
     try:

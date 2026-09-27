@@ -9,12 +9,18 @@ import uuid
 from functools import lru_cache
 
 import firebase_admin
+from fastapi import FastAPI, Header, HTTPException, Response
+from fastapi.middleware.cors import CORSMiddleware
+from firebase_admin import auth as firebase_auth
+from google import genai
+from pydantic import BaseModel, Field
+
 from agent_finance import (
     AGENT_TONE,
     MODEL_CANDIDATES,
     AgentResponse,
+    build_genai_client,
     contains_protected_terms,
-    load_api_key,
 )
 from data_manager_client import (
     DataManagerError,
@@ -23,12 +29,7 @@ from data_manager_client import (
     get_customer_adjustments,
     get_customer_snapshot,
 )
-from fastapi import FastAPI, Header, HTTPException, Response
-from fastapi.middleware.cors import CORSMiddleware
-from firebase_admin import auth as firebase_auth
-from google import genai
 from guardrails_client import GuardrailsUnavailable, check_input, check_output
-from pydantic import BaseModel, Field
 
 logger = logging.getLogger("financial_agent")
 app = FastAPI(title="Financial Agent API", version="1.0.0")
@@ -314,6 +315,9 @@ DEFAULT_DEMO_USERS = (
     "00000000-0000-4000-8000-000000000003",
     "00000000-0000-4000-8000-000000000004",
     "00000000-0000-4000-8000-000000000005",
+    "5865ce27-0681-4dcc-9475-3df9d15a6858",  # Renata Lopes (cliente oficial demo)
+    "139aae21-0535-4a19-bbf2-d2b8f0c7a0d8",  # Maria (perfil extrato)
+    "d6c59567-c0e0-4966-ba09-883eb6d859e2",  # Maria (perfil cheque especial)
 )
 
 
@@ -394,7 +398,7 @@ def chat_scope_response(message: str) -> str | None:
 
 @lru_cache(maxsize=1)
 def chat_client() -> genai.Client:
-    return genai.Client(api_key=load_api_key())
+    return build_genai_client()
 
 
 def generate_chat_message(

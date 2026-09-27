@@ -32,13 +32,16 @@ def _identity_token(audience: str) -> str:
 
 def _get_json(path: str, expected_user_id: str) -> dict:
     base = service_url()
-    try:
-        token = _identity_token(base)
-    except Exception as exc:
-        raise DataManagerUnavailable("Não foi possível autenticar a chamada ao data_manager.") from exc
+    headers = {"Accept": "application/json"}
+    if not base.startswith(("http://localhost", "http://127.0.0.1")):
+        try:
+            token = _identity_token(base)
+            headers["Authorization"] = f"Bearer {token}"
+        except Exception as exc:
+            raise DataManagerUnavailable("Não foi possível autenticar a chamada ao data_manager.") from exc
     request = UrlRequest(
         f"{base}{path}",
-        headers={"Authorization": f"Bearer {token}", "Accept": "application/json"},
+        headers=headers,
         method="GET",
     )
     try:

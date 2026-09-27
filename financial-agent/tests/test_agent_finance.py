@@ -1,7 +1,7 @@
 import json
 import sys
 import unittest
-from datetime import date, datetime, timezone
+from datetime import UTC, date, datetime
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch
@@ -10,6 +10,10 @@ from unittest.mock import patch
 _AGENT_DIR = Path(__file__).resolve().parent.parent
 if str(_AGENT_DIR) not in sys.path:
     sys.path.insert(0, str(_AGENT_DIR))
+
+from fastapi import HTTPException
+from fastapi.testclient import TestClient
+from pydantic import ValidationError
 
 from agent_finance import (
     AgentResponse,
@@ -31,10 +35,7 @@ from data_manager_client import (
     get_customer_adjustments,
     get_customer_snapshot,
 )
-from fastapi import HTTPException
-from fastapi.testclient import TestClient
 from guardrails_client import GuardrailsUnavailable
-from pydantic import ValidationError
 
 
 class FinanceContextTests(unittest.TestCase):
@@ -128,9 +129,9 @@ class FinanceContextTests(unittest.TestCase):
     def test_demo_uses_each_users_latest_available_month(self):
         fake_client = unittest.mock.Mock()
         fake_client.query.return_value.result.return_value = [
-            {"anomes": 202510, "anomesdia": datetime(2025, 10, 31, tzinfo=timezone.utc), "tipo": "S", "vlr": 10, "saldo_apos": 90},
-            {"anomes": 202511, "anomesdia": datetime(2025, 11, 30, tzinfo=timezone.utc), "tipo": "S", "vlr": 20, "saldo_apos": 70},
-            {"anomes": 202512, "anomesdia": datetime(2025, 12, 31, tzinfo=timezone.utc), "tipo": "S", "vlr": 30, "saldo_apos": 40},
+            {"anomes": 202510, "anomesdia": datetime(2025, 10, 31, tzinfo=UTC), "tipo": "S", "vlr": 10, "saldo_apos": 90},
+            {"anomes": 202511, "anomesdia": datetime(2025, 11, 30, tzinfo=UTC), "tipo": "S", "vlr": 20, "saldo_apos": 70},
+            {"anomes": 202512, "anomesdia": datetime(2025, 12, 31, tzinfo=UTC), "tipo": "S", "vlr": 30, "saldo_apos": 40},
         ]
         with patch.dict("os.environ", {"DEMO_MODE": "true"}), patch(
             "agent_finance.bigquery.Client", return_value=fake_client
@@ -593,6 +594,28 @@ class FinanceContextTests(unittest.TestCase):
         self.assertIsNotNone(generated_session)
         self.assertEqual(response.headers.get("X-Session-ID"), generated_session)
         self.assertEqual(response.headers.get("X-Trace-ID"), generated_session)
+
+    def test_demo_users_allowlist_includes_official_demo_profiles(self):
+        renata_lopes = "5865ce27-0681-4dcc-9475-3df9d15a6858"
+        maria_extrato = "139aae21-0535-4a19-bbf2-d2b8f0c7a0d8"
+        with patch.dict("os.environ", {"DEMO_MODE": "true", "DEMO_ACCESS_TOKEN": self.DEMO_KEY}):
+            self.assertEqual(verify_finance_user(renata_lopes, None, self.DEMO_KEY), renata_lopes)
+            self.assertEqual(verify_finance_user(maria_extrato, None, self.DEMO_KEY), maria_extrato)
+
+    def test_vertex_ai_auto_enabled_on_cloud_run_without_key(self):
+        from agent_finance import vertex_ai_enabled
+        with patch.dict("os.environ", {"K_SERVICE": "financial-agent"}, clear=True):
+            self.assertTrue(vertex_ai_enabled())
+
+    def test_chat_client_uses_build_genai_client(self):
+        from api import chat_client
+        chat_client.cache_clear()
+        mock_client = object()
+        with patch("api.build_genai_client", return_value=mock_client) as mock_build:
+            client = chat_client()
+            self.assertIs(client, mock_client)
+            mock_build.assert_called_once()
+        chat_client.cache_clear()
 
 
 if __name__ == "__main__":
