@@ -1224,7 +1224,7 @@ const EVENTOS_PERMITIDOS = new Set([
   'fab_opened', 'card_selected', 'risk_projected', 'suggestion_rejected', 'alternatives_offered',
   'alternative_selected', 'auth_requested', 'pix_rescheduled', 'projection_updated', 'share_opened',
   'alert_opt_in', 'feedback', 'month_end_check', 'chat_closed', 'path_not_in_demo', 'pix_guard_warned',
-  'pix_guard_continued', 'intent_classified', 'suggestion_accepted',
+  'pix_guard_continued', 'intent_classified', 'suggestion_accepted', 'help_article_opened',
 ]);
 app.post('/api/eventos', (req: Request, res: Response) => {
   const { name, detail } = req.body || {};
