@@ -16,7 +16,7 @@ from google import genai
 from google.cloud import bigquery
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
-from guardrails_client import GuardrailsUnavailable, check_input, check_output
+from guardrails_client import GuardrailsUnavailable, check_input_sync, check_output_sync
 
 load_dotenv(Path(__file__).resolve().parent / ".env")
 
@@ -652,7 +652,7 @@ def gerar_plano_otimizacao(json_contexto: dict, user_id: str = "default_user") -
     # Validação de entrada (Guardrails)
     try:
         # Simplificamos o contexto para o guardrail de entrada se necessário
-        check_input(f"Gerar plano para contexto: {json.dumps(json_contexto)[:500]}", user_id)
+        check_input_sync(f"Gerar plano para contexto: {json.dumps(json_contexto)[:500]}", user_id)
     except GuardrailsUnavailable:
         pass # Se o serviço cair, seguimos com as regras locais
 
@@ -703,7 +703,7 @@ def gerar_plano_otimizacao(json_contexto: dict, user_id: str = "default_user") -
                 # Validação de saída (Guardrails)
                 try:
                     res_text = f"{plano['diagnostico']} " + " ".join([a['descricao'] for a in plano['acoes']])
-                    check_output(res_text, "Gerar plano de economia", json_contexto, user_id)
+                    check_output_sync(res_text, "Gerar plano de economia", json_contexto, user_id)
                 except GuardrailsUnavailable:
                     pass
 
