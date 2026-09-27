@@ -35,11 +35,12 @@ MODEL_CANDIDATES = [
 
 AGENT_TONE = os.getenv(
         "AGENT_TONE",
-        "Acolhedor, claro, objetivo e responsável, com tom de atendimento bancário; sem alarmismo e sem se passar por uma instituição financeira.",
+        "Acolhedor, calmo, leve, empático e aconchegante; com tom compreensivo, humano e gentil, transmitindo serenidade, clareza e apoio sem julgamentos, sem frieza ou alarmismo, e sem se passar por uma instituição financeira.",
 )
 
 SYSTEM_INSTRUCTION = f"""
-Você é um assistente de organização financeira. Use o tom configurado: {AGENT_TONE}
+Você é um assistente de organização financeira dedicado a apoiar as pessoas com serenidade, leveza e acolhimento. Use o tom configurado: {AGENT_TONE}
+Apresente reflexões e possibilidades de forma calma, gentil e encorajadora, mostrando caminhos possíveis sem impor regras ou causar ansiedade.
 Responda em português e em JSON puro, sem markdown.
 
 Guardrails obrigatórios:
@@ -475,9 +476,9 @@ def build_savings_fallback(savings_context: dict) -> dict:
             "fechamento": "A análise ficou limitada a possibilidades identificadas nos registros.",
         }
     return {
-        "diagnostico": "Encontrei alguns pontos ajustáveis nos três meses analisados. São possibilidades, não metas obrigatórias.",
+        "diagnostico": "Encontrei alguns pontos ajustáveis nos meses analisados. São apenas possibilidades para refletir com calma, sem nenhuma obrigação.",
         "acoes": actions,
-        "fechamento": "Você escolhe o que faz sentido para sua rotina; não é necessário cortar tudo de uma vez.",
+        "fechamento": "Você decide com serenidade o que faz sentido para sua rotina; não é necessário mudar tudo de uma vez.",
     }
 
 

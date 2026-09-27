@@ -144,6 +144,17 @@ const GOAL_FLOW_CHIPS: Record<1 | 2 | 3, string[]> = {
   3: ['12 meses', 'dezembro 2028', 'dezembro 2030'],
 };
 
+// Respostas sugeridas e ideias para o usuário clicar com um toque
+export const QUICK_SUGGESTIONS = [
+  { icon: '🏖️', label: 'Lazer sem culpa', prompt: 'Quanto posso gastar com lazer sem culpa?' },
+  { icon: '📊', label: 'Raio-X de contas', prompt: 'Faça o Raio-X das minhas contas fixas.' },
+  { icon: '✈️', label: 'Gastos com Viagens', prompt: 'Quanto gastei com viagens este mês?' },
+  { icon: '🛍️', label: 'Lojas e Delivery', prompt: 'Quanto gastei com lojas e compras recentemente?' },
+  { icon: '🛡️', label: 'Proteger orçamento', prompt: 'Como evitar que minha conta fique negativa antes do salário?' },
+  { icon: '🎯', label: 'Divisão do salário', prompt: 'Programe a divisão do salário entre gastos essenciais e não essenciais.' },
+  { icon: '🚗', label: 'Teto de Transporte', prompt: 'Definir meu teto de gastos de transporte do mês.' },
+];
+
 const isCategoryCapsRequest = (text: string) => {
   const t = text.normalize('NFD').replace(/\p{M}/gu, '').toLowerCase();
   if (t.includes('transporte')) return false;
@@ -383,25 +394,66 @@ export const IaiChatScreen: React.FC<IaiChatScreenProps> = ({
     ]);
   }, [isGoalCreationFlow]);
 
-  // Jornada do salário: saudação + 3 cards (só o do meio segue o fluxo principal da demo)
+  // Jornada do salário: saudação com diagnóstico do Financial Agent + 3 cards
   useEffect(() => {
     if (!salaryPlanMode) return;
     logEvento('fab_opened', 'trigger=salary_received');
+
     setMessages([
       { id: 'plan-hello', sender: 'iai', text: `**ia.i**, ${cliente.primeiroNome}! Seu salário caiu.`, timestamp: nowTime() },
       {
         id: 'plan-hello-2',
         sender: 'iai',
-        text: 'Quer ver quanto dá pra gastar por semana e fechar o mês no verde?',
+        text: 'Consultando o diagnóstico do seu orçamento com o assistente financeiro...',
         timestamp: nowTime(),
-        planCards: [
-          { label: 'Quanto posso gastar por semana com tranquilidade?', action: 'semana' },
-          { label: 'O que ainda vai sair da minha conta este mês?', action: 'saidas' },
-          { label: 'Me avisa antes de um gasto apertar meu mês?', action: 'aviso' },
-        ],
       },
     ]);
-    // Carrega os números da jornada enquanto a pessoa lê a saudação
+
+    // 1. Consulta o diagnóstico proativo oficial do Financial Agent (/api/agent/analyze)
+    fetch('/api/agent/analyze', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ sessionId: sessionIdRef.current }),
+    })
+      .then((r) => r.json())
+      .then((analysis) => {
+        const textoDiagnostico = analysis?.mensagem
+          ? `${analysis.mensagem} ${analysis.pergunta || 'Quer ver quanto dá pra gastar por semana e fechar o mês no verde?'}`
+          : 'Quer ver quanto dá pra gastar por semana e fechar o mês no verde?';
+
+        setMessages([
+          { id: 'plan-hello', sender: 'iai', text: `**ia.i**, ${cliente.primeiroNome}! Seu salário caiu.`, timestamp: nowTime() },
+          {
+            id: 'plan-hello-2',
+            sender: 'iai',
+            text: textoDiagnostico,
+            timestamp: nowTime(),
+            planCards: [
+              { label: 'Quanto posso gastar por semana com tranquilidade?', action: 'semana' },
+              { label: 'O que ainda vai sair da minha conta este mês?', action: 'saidas' },
+              { label: 'Me avisa antes de um gasto apertar meu mês?', action: 'aviso' },
+            ],
+          },
+        ]);
+      })
+      .catch(() => {
+        setMessages([
+          { id: 'plan-hello', sender: 'iai', text: `**ia.i**, ${cliente.primeiroNome}! Seu salário caiu.`, timestamp: nowTime() },
+          {
+            id: 'plan-hello-2',
+            sender: 'iai',
+            text: 'Quer ver quanto dá pra gastar por semana e fechar o mês no verde?',
+            timestamp: nowTime(),
+            planCards: [
+              { label: 'Quanto posso gastar por semana com tranquilidade?', action: 'semana' },
+              { label: 'O que ainda vai sair da minha conta este mês?', action: 'saidas' },
+              { label: 'Me avisa antes de um gasto apertar meu mês?', action: 'aviso' },
+            ],
+          },
+        ]);
+      });
+
+    // 2. Carrega os números da jornada enquanto a pessoa lê a saudação
     fetch('/api/plano-salario')
       .then((r) => r.json())
       .then((d: PlanoSalarioData) => {
@@ -919,7 +971,7 @@ export const IaiChatScreen: React.FC<IaiChatScreenProps> = ({
     }
   };
 
-  // Classifica a resposta livre; sem Gemini (ou com erro), usa palavras-chave
+  // Classifica a resposta livre; sem Gemini (ou com erro), usa palavras-chave apenas para respostas curtas
   const classificar = async (texto: string, stage: Exclude<PlanStage, null>, opcoes: PlanOption[]): Promise<string | null> => {
     try {
       const r = await fetch('/api/plano-salario/intencao', {
@@ -929,7 +981,13 @@ export const IaiChatScreen: React.FC<IaiChatScreenProps> = ({
       }).then((res) => res.json());
       if (r.origem === 'gemini') return r.opcao ?? null;
     } catch {
-      /* segue para as palavras-chave */
+      /* segue para as palavras-chave apenas se houver falha de rede */
+    }
+    // Se o usuário digitou uma frase mais longa (mais de 3 palavras), não forçamos palavras-chave:
+    // é uma pergunta ou dúvida legítima que deve ir diretamente para o Financial Agent!
+    const palavrasTexto = texto.trim().split(/\s+/);
+    if (palavrasTexto.length > 3) {
+      return null;
     }
     const t = texto.toLowerCase();
     return opcoes.find((o) => o.palavras.some((p) => t.includes(p)))?.id ?? null;
@@ -950,7 +1008,10 @@ export const IaiChatScreen: React.FC<IaiChatScreenProps> = ({
     setIsLoading(true);
     const opcao = await classificar(text, stage, opcoesDaEtapa(stage, d));
     setIsLoading(false);
-    if (!opcao) return false; // não é uma resposta da etapa: o chat responde normalmente (a pessoa já aparece na conversa)
+    if (!opcao) {
+      setStage(null); // Importante: reseta a etapa para que a conversa siga 100% livre com o Financial Agent
+      return false; // não é uma resposta da etapa: o chat responde normalmente com o Financial Agent
+    }
     logEvento('intent_classified', `${stage}=${opcao}`);
     await runPlanAction(opcao, text, true);
     return true;
@@ -1100,7 +1161,31 @@ export const IaiChatScreen: React.FC<IaiChatScreenProps> = ({
         return;
       }
       await thinking();
-      pushIai('Claro! Achei duas saídas que não mexem nas suas assinaturas:', { planBlock: 'alternativas' });
+
+      // Consulta o /api/agent/savings para carregar alternativas reais calculadas pelo agente
+      let savingsData: any = null;
+      try {
+        savingsData = await fetch('/api/agent/savings', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ sessionId: sessionIdRef.current, consent: true }),
+        }).then((r) => r.json());
+      } catch {
+        savingsData = null;
+      }
+
+      if (savingsData?.acoes && savingsData.acoes.length > 0) {
+        const resumoAcoes = savingsData.acoes
+          .map((a: any) => `• **${a.titulo}**${a.descricao ? `: ${a.descricao}` : ''}`)
+          .join('\n');
+        pushIai(
+          `Claro! O **Financial Agent** calculou oportunidades para manter seu orçamento protegido:\n\n${resumoAcoes}`,
+          { planBlock: 'alternativas' },
+        );
+      } else {
+        pushIai('Claro! Achei duas saídas que não mexem nas suas assinaturas:', { planBlock: 'alternativas' });
+      }
+
       logEvento('alternatives_offered', 'n=2');
       await wait(400);
       pushIai('Qual dessas faz mais sentido pra você?');
@@ -1801,6 +1886,23 @@ export const IaiChatScreen: React.FC<IaiChatScreenProps> = ({
 
       {/* Bottom Area: Input + Disclaimer fixed to bottom of app viewport */}
       <div className="sticky bottom-0 left-0 right-0 z-30 p-3 pb-4 sm:pb-3 bg-[#FAF9F7] shrink-0 space-y-1.5 border-t border-slate-100 shadow-[0_-2px_10px_rgba(0,0,0,0.03)]">
+        {/* Sugestões rápidas de perguntas para o Financial Agent (chips clicáveis) */}
+        {!isLoading && voice.status !== 'recording' && (
+          <div className="flex items-center gap-1.5 overflow-x-auto [&::-webkit-scrollbar]:hidden py-1 px-0.5">
+            {QUICK_SUGGESTIONS.map((sug, idx) => (
+              <button
+                key={idx}
+                type="button"
+                onClick={() => handleSendMessage(sug.prompt)}
+                className="whitespace-nowrap px-3 py-1.5 rounded-full bg-white hover:bg-[#FFF4EB] border border-slate-200/90 hover:border-[#FFD8B5] text-[11px] font-semibold text-slate-700 hover:text-[#EC7000] shadow-2xs transition-all cursor-pointer shrink-0 active:scale-95 flex items-center gap-1.5"
+              >
+                <span>{sug.icon}</span>
+                <span>{sug.label}</span>
+              </button>
+            ))}
+          </div>
+        )}
+
         {voice.status === 'recording' ? (
           <div
             className="flex items-center gap-2.5 pl-2 pr-1.5 py-1.5 bg-white border border-[#FFD8B5] rounded-2xl shadow-2xs animate-fadeIn"

@@ -791,5 +791,26 @@ class FinanceContextTests(unittest.TestCase):
         self.assertIn("X-Conversa-ID", response.headers)
 
 
+    def test_chat_welcomes_greetings_and_courtesy_without_out_of_scope_rejection(self):
+        # Saudações e gentilezas cotidianas devem retornar None (não bloqueiam o fluxo nem rejeitam com fora_escopo)
+        for greeting in ("Oi", "Olá", "Bom dia", "Tudo bem?", "Boa tarde", "Muito obrigado", "Valeu!"):
+            self.assertIsNone(chat_scope_response(greeting), f"Falhou para saudação: {greeting}")
+
+    def test_chat_scope_redirection_is_warm_calm_and_not_bossy(self):
+        reply = chat_scope_response("Me ajuda com receita de bolo?")
+        self.assertIsNotNone(reply)
+        self.assertIn("organização do orçamento", reply)
+        # Não deve conter ordens rudes como 'manter a conversa nesse foco' ou 'sem sair desse foco'
+        self.assertNotIn("nesse foco", reply)
+        self.assertNotIn("sem sair desse foco", reply)
+
+    def test_agent_tone_is_calm_light_and_cozy(self):
+        from agent_finance import AGENT_TONE
+        self.assertIn("Acolhedor", AGENT_TONE)
+        self.assertIn("calmo", AGENT_TONE)
+        self.assertIn("aconchegante", AGENT_TONE)
+        self.assertNotIn("atendimento bancário", AGENT_TONE)
+
+
 if __name__ == "__main__":
     unittest.main()

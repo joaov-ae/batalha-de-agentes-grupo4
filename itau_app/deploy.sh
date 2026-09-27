@@ -32,7 +32,8 @@ fi
 gcloud run deploy itau-app --project "${PROJETO}" --region "${REGIAO}" \
   --image "${IMAGEM}" --service-account "${SA}" \
   --min-instances=1 \
-  --allow-unauthenticated
+  --allow-unauthenticated \
+  --set-env-vars="FINANCIAL_AGENT_URL=https://financial-agent-zqj7scngrq-uc.a.run.app,DATA_MANAGER_URL=https://data-manager-itau-zqj7scngrq-uc.a.run.app,OBSERVABILIDADE_URL=https://observabilidade-itau-zqj7scngrq-uc.a.run.app"
 
 URL=$(gcloud run services describe itau-app --project "${PROJETO}" --region "${REGIAO}" --format 'value(status.url)')
 echo "App: ${URL}"

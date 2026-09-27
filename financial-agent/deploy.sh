@@ -33,5 +33,8 @@ gcloud run deploy financial-agent --project "${PROJETO}" --region "${REGIAO}" \
   --set-env-vars="GOOGLE_CLOUD_PROJECT=${PROJETO},DATA_MANAGER_URL=${DATA_MANAGER_URL},GUARDRAILS_URL=${GUARDRAILS_URL},OBSERVABILIDADE_URL=${OBSERVABILIDADE_URL},DEMO_MODE=true,DEMO_ACCESS_TOKEN=demo-hackathon-key" \
   --set-secrets="GEMINI_API_KEY=gemini-api-key:latest"
 
+gcloud run services add-iam-policy-binding financial-agent --project "${PROJETO}" --region "${REGIAO}" \
+  --member="serviceAccount:${SA}" --role="roles/run.invoker" --quiet || true
+
 URL=$(gcloud run services describe financial-agent --project "${PROJETO}" --region "${REGIAO}" --format 'value(status.url)')
 echo "Financial Agent deployed: ${URL}"

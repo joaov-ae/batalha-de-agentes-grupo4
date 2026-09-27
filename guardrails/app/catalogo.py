@@ -196,8 +196,8 @@ _ITENS = [
         "S10", "saida", "tom_inadequado",
         "Tom hostil, alarmista, autoritário, que culpa o cliente ou frio demais para clientes em situação de vulnerabilidade financeira.",
         Decisao.reescrever,
-        "Reescreva com tom amigável, cuidadoso e acolhedor. Evite urgência, imperativos autoritários e não culpe o cliente; informe o impacto com tranquilidade e deixe a decisão sempre com ele.",
-        "Estou aqui para te apoiar a organizar seu orçamento com tranquilidade. Gostaria de rever seus gastos com calma? " + _ESCOPO,
+        "Reescreva com tom amigável, calmo, leve, empático e acolhedor. Evite urgência, rigidez, ordens imperativas ou cobrança sobre o orçamento; acolha com serenidade e deixe a decisão sempre com o cliente.",
+        "Estou aqui para te apoiar com todo o carinho e calma na organização do seu orçamento. Sempre que quiser, podemos conversar sobre como trazer mais folga e leveza para as suas contas.",
     ),
 ]
 

@@ -166,8 +166,8 @@ def _status_alert(snapshot: dict) -> dict:
         return {
             "status": "atendimento_humano",
             "mensagem": (
-                "Pelos dados disponíveis, sua situação precisa de atenção antes de falarmos em cortes. "
-                "Vou priorizar o encaminhamento para atendimento humano; não vou sugerir novas reduções agora."
+                "Pelos dados disponíveis, o momento pede um cuidado especial e apoio direto. "
+                "Vou priorizar o encaminhamento para atendimento humano; não vou sugerir novas reduções agora para você ter mais tranquilidade."
             ),
             "pergunta": None,
             "requer_consentimento_para_economia": False,
@@ -367,8 +367,8 @@ async def _guard_chat_output(
     # Fora do tom (S10) ou outra instrução suave de reescrita -> reitera APENAS UMA VEZ
     if "S10" in codigos1 or decision1 in {"reescrever", "permitir_com_instrucao"}:
         instruction = verdict1.get("instrucao_agente") or (
-            "Ajuste o tom: seja acolhedor, amigável, calmo e empático. Evite urgência, tom imperativo, autoritário "
-            "ou culpar o cliente; informe com tranquilidade e deixe a decisão com ele."
+            "Ajuste o tom: seja muito acolhedor, calmo, leve, empático e aconchegante. Evite urgência, tom imperativo, autoritário, "
+            "frieza ou culpar o cliente; transmita tranquilidade, acolha o momento dele e deixe qualquer decisão inteiramente com ele."
         )
         logger.info("[%s] Resposta fora do tom (S10). Reiterando uma única vez com ajuste.", session_id)
 
@@ -1103,7 +1103,7 @@ async def chat(
     if status.get("encaminhar_atendimento") or status.get("estado") == "ja_no_buraco":
         result = {
             "status": "atendimento_humano",
-            "mensagem": "Pelos dados disponíveis, este caso precisa de atendimento humano. Não vou sugerir novos cortes agora.",
+            "mensagem": "Pelos dados disponíveis, o momento pede um cuidado especial e apoio direto. Vou priorizar o encaminhamento para atendimento humano; não vou sugerir novos cortes agora para você ter mais tranquilidade.",
             "periodo": _period(status.get("data_referencia")),
             "modo_demo": os.getenv("DEMO_MODE", "false").lower() == "true",
             "session_id": session_id,
