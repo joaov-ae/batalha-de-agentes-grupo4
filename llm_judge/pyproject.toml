@@ -1,0 +1,24 @@
+[project]
+name = "llm-judge-itau"
+version = "0.1.0"
+description = "LLM-as-judge de tom das mensagens do Agente Otimizador: DSPy + Gemini, publicado como agente ADK no Vertex AI Agent Engine."
+requires-python = ">=3.12"
+dependencies = [
+    "dspy[optuna]>=3.0",
+    "google-adk>=1.10",
+    "google-cloud-aiplatform[agent_engines,adk]>=1.110",
+    "openpyxl>=3.1",
+    "pydantic>=2.8",
+    "pydantic-settings>=2.4",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=8.3",
+    "pytest-asyncio>=0.24",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
+asyncio_mode = "auto"
