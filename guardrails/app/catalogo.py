@@ -192,6 +192,13 @@ _ITENS = [
         "Não gere conteúdo nocivo. Mantenha a resposta no escopo financeiro.",
         "Não consegui gerar essa resposta agora. " + _ESCOPO,
     ),
+    ItemCatalogo(
+        "S10", "saida", "tom_inadequado",
+        "Tom hostil, alarmista, autoritário, que culpa o cliente ou frio demais para clientes em situação de vulnerabilidade financeira.",
+        Decisao.reescrever,
+        "Reescreva com tom amigável, cuidadoso e acolhedor. Evite urgência, imperativos autoritários e não culpe o cliente; informe o impacto com tranquilidade e deixe a decisão sempre com ele.",
+        "Estou aqui para te apoiar a organizar seu orçamento com tranquilidade. Gostaria de rever seus gastos com calma? " + _ESCOPO,
+    ),
 ]
 
 CATALOGO: dict[str, ItemCatalogo] = {i.codigo: i for i in _ITENS}

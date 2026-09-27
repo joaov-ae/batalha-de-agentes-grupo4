@@ -6,7 +6,7 @@ from pydantic import BaseModel, Field
 
 from app.catalogo import Decisao, Severidade
 
-Camada = Literal["regra", "gemini", "model_armor"]
+Camada = Literal["regra", "gemini", "model_armor", "juiz_tom"]
 
 
 class Fala(BaseModel):

@@ -19,6 +19,8 @@ class Fonte(StrEnum):
     agente_filtro_saida = "agente_filtro_saida"
     # status=atendimento_humano (ja_no_buraco ou encaminhar_atendimento): o agente não otimiza e encaminha.
     atendimento_humano = "atendimento_humano"
+    # Avaliador de tom (LLM-as-judge)
+    juiz_tom = "juiz_tom"
 
 
 class Decisao(StrEnum):
@@ -133,6 +135,7 @@ _GUARDRAILS = [
     ("S07", "saida", "numero_nao_suportado", Decisao.reescrever),
     ("S08", "saida", "dados_pessoais", Decisao.mascarar),
     ("S09", "saida", "conteudo_nocivo", Decisao.bloquear),
+    ("S10", "saida", "tom_inadequado", Decisao.reescrever),
 ]
 
 # Intervenções do próprio financial-agent (prefixo AG_), com os mesmos campos dos códigos do guardrails.
@@ -143,6 +146,7 @@ _AGENTE = [
     ("AG_FILTRO_TERMO_PROTEGIDO", Fonte.agente_filtro_saida, "saida", "termo_protegido", Decisao.reescrever),
     ("AG_FILTRO_ESCOPO", Fonte.agente_filtro_saida, "saida", "resposta_fora_do_escopo", Decisao.reescrever),
     ("AG_ATENDIMENTO_HUMANO", Fonte.atendimento_humano, "saida", "encaminhamento", Decisao.bloquear),
+    ("AG_TOM_INADEQUADO", Fonte.juiz_tom, "saida", "tom_inadequado", Decisao.reescrever),
 ]
 
 CODIGOS: dict[str, CodigoIntervencao] = {

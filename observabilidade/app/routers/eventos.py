@@ -7,7 +7,7 @@ from typing import Any
 
 from fastapi import APIRouter, HTTPException
 
-from app.catalogo import CODIGOS, Fonte
+from app.catalogo import CODIGOS, Decisao, Fonte
 from app.deps import StoreDep
 from app.schemas import (
     AjusteEvento,
@@ -17,6 +17,7 @@ from app.schemas import (
     FeedbackEvento,
     IntervencaoEvento,
     MensagemEvento,
+    TomEvento,
     _novo_id,
 )
 
@@ -88,3 +89,28 @@ def alerta(ev: AlertaEvento, store: StoreDep) -> EventoRegistrado:
 @router.post("/ajuste", status_code=201, response_model=EventoRegistrado)
 def ajuste(ev: AjusteEvento, store: StoreDep) -> EventoRegistrado:
     return _gravar(store, "ajustes_oferecidos", [ev.model_dump(mode="json")], "ajuste_id")
+
+
+@router.post("/tom", status_code=201, response_model=EventoRegistrado)
+def tom(ev: TomEvento, store: StoreDep) -> EventoRegistrado:
+    """Registra uma avaliação do juiz de tom. Se reprovada, gera uma linha em `intervencoes`."""
+    linhas = []
+    if not ev.aprovado:
+        linhas.append({
+            "intervencao_id": _novo_id(),
+            "conversa_id": ev.conversa_id,
+            "mensagem_id": ev.mensagem_id,
+            "id_usuario": ev.id_usuario,
+            "criado_em": ev.criado_em.isoformat(),
+            "fonte": Fonte.juiz_tom.value,
+            "direcao": "saida",
+            "codigo": "S10",
+            "categoria": "tom_inadequado",
+            "decisao": Decisao.reescrever.value,
+            "camada": "juiz_tom",
+            "degradado": False,
+            "tentativa": 1,
+            "latencia_ms": ev.latencia_ms,
+        })
+    return _gravar(store, "intervencoes", linhas, "intervencao_id")
+
