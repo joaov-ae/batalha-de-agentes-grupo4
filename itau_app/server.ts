@@ -3,6 +3,7 @@ import type { Request, Response } from 'express';
 import { createServer as createViteServer } from 'vite';
 import { GoogleGenAI, Type } from '@google/genai';
 import path from 'path';
+import fs from 'fs';
 import dotenv from 'dotenv';
 
 dotenv.config();
@@ -41,7 +42,9 @@ Seu tom é pessoal, transparente, consultivo, acolhedor e seguro, típico do Ita
 DADOS DA CLIENTE (Maria - MA):
 - Perfil: Itaú Personnalité, Nível 4 no programa Minhas Vantagens.
 - Salário líquido mensal: R$ 10.000,00 (acabou de cair na conta)
-- Saldo em conta corrente: R$ 17.829,50; limite da conta: R$ 28.000,00
+- Saldo em conta corrente: R$ 3.776,24; limite da conta: R$ 28.000,00
+- Situação do mês (calculada sobre o extrato): se nada mudar, a conta fica negativa em 6 de janeiro, véspera do próximo salário (7 de janeiro), fechando em -R$ 883,22. Reagendar o Pix de R$ 962,77 do dia 6 para o dia 7 resolve este mês. As saídas fixas (R$ 7.687,30/mês) superam as entradas recorrentes (R$ 7.383,22/mês).
+- Nunca invente valores em reais: use apenas os números acima ou os que vierem na pergunta.
 - Metas ativas: Comprar uma casa (R$ 2.030 de R$ 700.000, até dez/2030), Comprar Carro Novo (R$ 27.000 de R$ 60.000), Chegada do Bebê (R$ 10.500 de R$ 35.000)
 - Pontos Itaú Shop: ganha pontos a cada aporte nas metas (1,5 ponto por real aportado)
 - Cartões: Personnalité Black Mastercard (final 9241).
@@ -367,7 +370,7 @@ app.get('/api/bigquery/extrato', async (req: Request, res: Response) => {
         IF(REGEXP_CONTAINS(descr, r'^pix'), 'Pix', nom_cate_micro) AS forma_pagamento,
         saldo_apos
       FROM ${fullTableId}
-      WHERE id_usuario = '139aae21-0535-4a19-bbf2-d2b8f0c7a0d8'
+      WHERE id_usuario = 'd6c59567-bb6d-4a01-a0bd-f9b6f811724b'
       ORDER BY anomesdia DESC
       LIMIT 100`;
 
@@ -446,13 +449,11 @@ app.get('/api/bigquery/extrato', async (req: Request, res: Response) => {
 // Banco, sobrenome e chave são gerados a partir do id para servir de exemplo.
 const PIX_PROJECT = 'batalha-time-04-z85x';
 const PIX_TABLE = '`batalha-time-04-z85x.hackathon_dados.extrato_sintetico_copy_copy`';
-const MARIA_ID_USUARIO = '139aae21-0535-4a19-bbf2-d2b8f0c7a0d8';
-const MARIA_SALDO_SNAPSHOT = 1744.32; // último saldo_apos dela na base
-// Saldo e limite mostrados na Home, no Extrato e usados no Pix (valores definidos no protótipo do Studio).
-// MARIA_SALDO_FONTE=bigquery passa a usar o último saldo_apos da base.
-const MARIA_SALDO_DEMO = 17829.5;
+// Cliente da demo ("Maria"): cliente real da base no estado "vai_faltar" do data_manager
+// (fecha o ciclo no negativo; reagendar um Pix para o dia do salário resolve).
+const MARIA_ID_USUARIO = 'd6c59567-bb6d-4a01-a0bd-f9b6f811724b';
+const MARIA_SALDO_SNAPSHOT = 3776.24; // saldo_hoje no data_manager (data_referencia 2025-12-15)
 const MARIA_LIMITE_CONTA = 28000;
-const MARIA_SALDO_FONTE = process.env.MARIA_SALDO_FONTE || 'demo';
 
 // Snapshot de usuários da base com "pix transf" (usado quando o BigQuery não está acessível)
 const PIX_USERS_SNAPSHOT = [
@@ -630,20 +631,269 @@ app.get('/api/pix/contatos', async (req: Request, res: Response) => {
 
 // Endpoint: saldo em conta da cliente (demo por padrão; ou último saldo_apos da base)
 app.get('/api/pix/saldo', async (_req: Request, res: Response) => {
-  if (MARIA_SALDO_FONTE !== 'bigquery') {
-    return res.json({ saldo: MARIA_SALDO_DEMO, limiteConta: MARIA_LIMITE_CONTA, origem: 'demo', idUsuario: MARIA_ID_USUARIO });
-  }
+  // Mesmo saldo_hoje usado pelo data_manager na projeção do mês
   try {
-    const rows = await runPixQuery(
-      `SELECT saldo_apos FROM ${PIX_TABLE} WHERE id_usuario = @id ORDER BY anomesdia DESC LIMIT 1`,
-      { id: MARIA_ID_USUARIO },
-    );
-    const saldo = rows.length ? Number(rows[0][0]) : MARIA_SALDO_SNAPSHOT;
-    return res.json({ saldo, limiteConta: MARIA_LIMITE_CONTA, origem: 'bigquery', idUsuario: MARIA_ID_USUARIO });
+    const st = await dataManager('/status');
+    return res.json({ saldo: Number(st.saldo_hoje), limiteConta: MARIA_LIMITE_CONTA, origem: 'data_manager', idUsuario: MARIA_ID_USUARIO });
   } catch (err) {
-    console.warn('Pix saldo: BigQuery indisponível, usando snapshot.', err instanceof Error ? err.message : err);
+    console.warn('Pix saldo: data_manager indisponível, usando snapshot.', err instanceof Error ? err.message : err);
     return res.json({ saldo: MARIA_SALDO_SNAPSHOT, limiteConta: MARIA_LIMITE_CONTA, origem: 'snapshot', idUsuario: MARIA_ID_USUARIO });
   }
+});
+
+// ================= Plano do mês no dia do salário (protótipo "prototipo-iai") =================
+// Os números vêm do data_manager_itau (Cloud Run, regras determinísticas sobre o BigQuery);
+// aqui só se monta a resposta da jornada. O LLM não calcula nenhum valor em R$.
+// Sem acesso ao data_manager (ex.: rodando local), usa a cópia em data/plano-salario-snapshot.json.
+const DATA_MANAGER_URL = process.env.DATA_MANAGER_URL || 'https://data-manager-itau-zqj7scngrq-uc.a.run.app';
+const PLANO_SNAPSHOT = JSON.parse(fs.readFileSync(path.resolve('data/plano-salario-snapshot.json'), 'utf8'));
+
+// Nomes amigáveis para as descrições do extrato sintético
+const DESCRICOES: Record<string, [string, string]> = {
+  'debito conta parc emprest': ['💳', 'Parcela do empréstimo'],
+  'da tv cabo': ['📺', 'TV a cabo'],
+  'plano cel': ['📱', 'Plano de celular'],
+  'debito conta tar pacote': ['🏦', 'Tarifa do pacote de serviços'],
+  'seg resid': ['🏠', 'Seguro residencial'],
+  'pag bol seg carro': ['🚗', 'Seguro do carro'],
+  'debito conta seg vida': ['🛡️', 'Seguro de vida'],
+  'assin paramount plus': ['📺', 'Paramount+'],
+  'assin globoplay': ['📺', 'Globoplay'],
+  'assin hbo max': ['📺', 'HBO Max'],
+  'pix transf terc': ['🔁', 'Pix agendado (transferência)'],
+  'pag bol mensal esc': ['🎓', 'Mensalidade escolar'],
+  'da agua esg': ['💧', 'Água e esgoto'],
+  'pix energ': ['💡', 'Conta de luz'],
+  'pag gas encan': ['🔥', 'Gás'],
+  'pag fat cart credito integral': ['💳', 'Fatura do cartão'],
+  'pag tit parc imov': ['🏠', 'Parcela do imóvel'],
+};
+const nomeAmigavel = (descr: string) => {
+  const d = DESCRICOES[descr];
+  return d ? { icone: d[0], nome: d[1] } : { icone: '•', nome: descr.charAt(0).toUpperCase() + descr.slice(1) };
+};
+const dataCurta = (iso: string) => `${iso.slice(8, 10)}/${iso.slice(5, 7)}`;
+const diaNum = (iso: string) => Number(iso.slice(8, 10));
+const round2 = (v: number) => Math.round(v * 100) / 100;
+
+// Token de identidade para chamar o data_manager (serviço privado; a SA tem roles/run.invoker)
+let cachedIdToken: { value: string | null; expires: number } | null = null;
+async function getIdToken(audience: string): Promise<string | null> {
+  if (cachedIdToken && cachedIdToken.expires > Date.now()) return cachedIdToken.value;
+  let value: string | null = null;
+  try {
+    const res = await fetch(
+      `http://metadata.google.internal/computeMetadata/v1/instance/service-accounts/default/identity?audience=${encodeURIComponent(audience)}`,
+      { headers: { 'Metadata-Flavor': 'Google' }, signal: AbortSignal.timeout(3000) },
+    );
+    if (res.ok) value = await res.text();
+  } catch {
+    value = null;
+  }
+  cachedIdToken = { value, expires: Date.now() + (value ? 45 : 5) * 60 * 1000 };
+  return value;
+}
+
+async function dataManager(pathAndQuery: string, init?: { method?: string; body?: unknown }): Promise<any> {
+  const token = await getIdToken(DATA_MANAGER_URL);
+  if (!token) throw new Error('Sem token de identidade (fora do Cloud Run)');
+  const res = await fetch(`${DATA_MANAGER_URL}/v1/clientes/${PLANO_SNAPSHOT.id_usuario}${pathAndQuery}`, {
+    method: init?.method || 'GET',
+    headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+    body: init?.body ? JSON.stringify(init.body) : undefined,
+    signal: AbortSignal.timeout(15000),
+  });
+  if (!res.ok) throw new Error(`data_manager ${pathAndQuery}: HTTP ${res.status}`);
+  return res.json();
+}
+
+async function carregarDadosPlano() {
+  try {
+    const [status, compromissos, projecao, ajustes, recorrencias] = await Promise.all([
+      dataManager('/status'),
+      dataManager('/compromissos'),
+      dataManager('/projecao'),
+      dataManager('/ajustes'),
+      dataManager('/recorrencias'),
+    ]);
+    return { status, compromissos, projecao, ajustes, recorrencias, origem: 'data_manager' };
+  } catch (err) {
+    console.warn('Plano do salário: data_manager indisponível, usando snapshot.', err instanceof Error ? err.message : err);
+    return { ...PLANO_SNAPSHOT, origem: 'snapshot' };
+  }
+}
+
+// Endpoint: tudo o que a jornada precisa, já calculado por regra
+app.get('/api/plano-salario', async (_req: Request, res: Response) => {
+  const d = await carregarDadosPlano();
+  const st = d.status;
+  const ajustes: any[] = d.ajustes.ajustes || [];
+  const ajustePix = ajustes.find((a) => a.tipo === 'mudanca_data');
+  const ajusteCorte = ajustes.find((a) => a.tipo === 'assinatura_redundante');
+
+  const saldoFinal = Number(d.projecao.saldo_final);
+  const pontos = (d.projecao.pontos || []).map((p: any) => ({ data: p.data, saldo: Number(p.saldo) }));
+  const pontosComSaldoInicial = [{ data: d.projecao.data_referencia || st.data_referencia, saldo: Number(d.projecao.saldo_inicial) }, ...pontos];
+
+  // Reagendar o Pix para o dia do salário: o valor sai da projeção deste ciclo
+  const valorPix = ajustePix ? Number(ajustePix.valor) : 0;
+  const dataPixAtual: string | null = ajustePix?.detalhes?.datas_previstas?.[0] || null;
+  const dataPixNova: string | null = ajustePix?.detalhes?.data_sugerida || null;
+  const saldoFinalMes = round2(saldoFinal + valorPix);
+  const pontosRecalculados = pontosComSaldoInicial.map((p) => ({
+    data: p.data,
+    saldo: round2(dataPixAtual && p.data >= dataPixAtual ? p.saldo + valorPix : p.saldo),
+  }));
+
+  // Próximo mês (regra): fecha com o que sobrar + renda recorrente − saídas recorrentes − gasto do dia a dia
+  const itens: any[] = d.recorrencias.itens || [];
+  const entradasMes = itens.filter((i) => i.tipo === 'entrada').reduce((s, i) => s + Number(i.valor_mensal), 0);
+  const saidasMes = itens.filter((i) => i.tipo !== 'entrada').reduce((s, i) => s + Number(i.valor_mensal), 0);
+  const variavelMes = Number(d.projecao.saida_variavel_diaria || 0) * 31;
+  const saldoProximoMes = round2(saldoFinalMes + entradasMes - saidasMes - variavelMes);
+
+  // Quanto dá pra gastar por semana: o gasto de costume + a sobra distribuída até o salário
+  const diasAteSalario = Number(st.dias_ate_salario) || pontos.length || 1;
+  const limiteSemanal = round2((Number(d.projecao.saida_variavel_diaria || 0) + Math.max(0, saldoFinalMes) / diasAteSalario) * 7);
+
+  const saidas = (d.compromissos.compromissos || []).map((c: any) => ({
+    ...nomeAmigavel(c.descricao),
+    quando: `${c.tipo_item === 'conta_fixa' || c.tipo_item === 'financiamento' ? 'vence' : 'dia'} ${dataCurta(c.data)}`,
+    valor: Math.abs(Number(c.valor)),
+    tipo: c.tipo_item,
+  }));
+
+  const servicos: any[] = ajusteCorte?.detalhes?.servicos || [];
+  const mantido = ajusteCorte?.detalhes?.servico_mantido_no_calculo;
+
+  res.json({
+    origem: d.origem,
+    dataReferencia: st.data_referencia,
+    cliente: {
+      saldoHoje: Number(st.saldo_hoje),
+      rendaMensal: Number(st.renda_mensal),
+      proximoSalario: { data: st.proximo_salario_data, formatado: st.formatado?.proximo_salario, valor: Number(st.proximo_salario_valor) },
+      estado: st.estado,
+    },
+    saidas,
+    totalSaidas: Number(d.compromissos.total_saidas),
+    projecao: {
+      saldoFinal,
+      diaQueAcaba: st.dia_que_acaba,
+      diaNegativo: st.dia_que_acaba ? diaNum(st.dia_que_acaba) : null,
+      diaQueAcabaFormatado: st.formatado?.dia_que_acaba,
+      jurosEstimados: Number(st.juros_estimados || 0),
+      pontos: pontosComSaldoInicial,
+      pontosRecalculados,
+    },
+    corte: ajusteCorte
+      ? {
+          ajusteId: ajusteCorte.ajuste_id,
+          servicos: servicos.map((s) => nomeAmigavel(`assin ${s.servico}`).nome),
+          mantido: mantido ? nomeAmigavel(`assin ${mantido}`).nome : null,
+          economiaMensal: Number(ajusteCorte.detalhes?.economia_mensal || ajusteCorte.valor),
+          ganhoAteSalario: Number(ajusteCorte.ganho_vespera_salario),
+          saldoFinalComCorte: round2(saldoFinal + Number(ajusteCorte.ganho_vespera_salario)),
+          resolve: !!ajusteCorte.resolve,
+        }
+      : null,
+    pix: ajustePix
+      ? {
+          ajusteId: ajustePix.ajuste_id,
+          destinatario: 'transferência agendada',
+          descricao: nomeAmigavel('pix transf terc').nome,
+          valor: valorPix,
+          dataAtual: dataCurta(dataPixAtual!),
+          diaAtual: diaNum(dataPixAtual!),
+          dataIsoNova: dataPixNova,
+          novaData: dataCurta(dataPixNova!),
+          novoDia: diaNum(dataPixNova!),
+          saldoFinalMes,
+          saldoProximoMes,
+          limiteSemanal,
+          resolve: !!ajustePix.resolve,
+        }
+      : null,
+    // Alternativa 2: deixar o limite da conta cobrir (quanto custa em juros)
+    limiteConta: { juros: Number(st.juros_estimados || 0) },
+    proximoMes: { entradas: round2(entradasMes), saidasFixas: round2(saidasMes), gastoDiaADia: round2(variavelMes) },
+  });
+});
+
+// Endpoint: registra a decisão do cliente sobre um ajuste (memória do agente no data_manager)
+app.post('/api/plano-salario/decisao', async (req: Request, res: Response) => {
+  const { ajusteId, aceito } = req.body || {};
+  if (typeof ajusteId !== 'string' || typeof aceito !== 'boolean') return res.status(400).json({ error: 'Pedido inválido.' });
+  try {
+    await dataManager('/memoria/decisoes', { method: 'POST', body: { ajuste_id: ajusteId, aceito } });
+    return res.json({ ok: true, origem: 'data_manager' });
+  } catch (err) {
+    return res.json({ ok: true, origem: 'local', aviso: err instanceof Error ? err.message : String(err) });
+  }
+});
+
+// Endpoint: reagenda o Pix (após a biometria). No data_manager a ação é simulada (simulado: true).
+app.post('/api/plano-salario/reagendar', async (_req: Request, res: Response) => {
+  const d = await carregarDadosPlano();
+  const ajustePix = (d.ajustes.ajustes || []).find((a: any) => a.tipo === 'mudanca_data');
+  if (!ajustePix) return res.status(404).json({ error: 'Nenhum Pix reagendável.' });
+  try {
+    const resultado = await dataManager('/acoes/agendar-pix', {
+      method: 'POST',
+      body: {
+        valor: Number(ajustePix.valor),
+        data: ajustePix.detalhes.data_sugerida,
+        descricao: ajustePix.titulo,
+        ajuste_id: ajustePix.ajuste_id,
+      },
+    });
+    await dataManager('/memoria/decisoes', { method: 'POST', body: { ajuste_id: ajustePix.ajuste_id, aceito: true } }).catch(() => {});
+    return res.json({ ok: true, origem: 'data_manager', resultado });
+  } catch (err) {
+    return res.json({ ok: true, origem: 'local', simulado: true, aviso: err instanceof Error ? err.message : String(err) });
+  }
+});
+
+// Endpoint: simula um Pix antes de confirmar (alerta "antes de um Pix que estouraria o limite", sem bloquear)
+app.post('/api/pix/simular', async (req: Request, res: Response) => {
+  const valor = Number(req.body?.valor);
+  if (!(valor > 0)) return res.status(400).json({ error: 'Valor inválido.' });
+  try {
+    const r = await dataManager('/simulacoes/transacao', { method: 'POST', body: { valor, canal: 'pix', descricao: 'pix' } });
+    const contas = (r.contas_comprometidas || []).map((c: any) => ({ ...c, descricao: nomeAmigavel(c.descricao).nome }));
+    return res.json({ ...r, contas_comprometidas: contas, origem: 'data_manager' });
+  } catch {
+    // Regra local equivalente sobre a projeção salva
+    const p = PLANO_SNAPSHOT.projecao;
+    const minimoDepois = Number(p.saldo_minimo) - valor;
+    const primeiroNegativo = (p.pontos as any[]).find((pt) => Number(pt.saldo) - valor < 0);
+    return res.json({
+      fica_negativo: minimoDepois < 0,
+      saldo_minimo_depois: round2(minimoDepois),
+      dia_que_acaba_depois: primeiroNegativo?.data || null,
+      contas_comprometidas: [],
+      data_sugerida: PLANO_SNAPSHOT.status.proximo_salario_data,
+      formatado: {
+        dia_que_acaba_depois: primeiroNegativo ? dataCurta(primeiroNegativo.data) : null,
+        data_sugerida: PLANO_SNAPSHOT.status.formatado?.proximo_salario,
+      },
+      origem: 'snapshot',
+    });
+  }
+});
+
+// Endpoint: eventos da jornada (no produto vão para o pipeline de eventos; aqui, log estruturado no Cloud Logging)
+const EVENTOS_PERMITIDOS = new Set([
+  'fab_opened', 'card_selected', 'risk_projected', 'suggestion_rejected', 'alternatives_offered',
+  'alternative_selected', 'auth_requested', 'pix_rescheduled', 'projection_updated', 'share_opened',
+  'alert_opt_in', 'feedback', 'month_end_check', 'chat_closed', 'path_not_in_demo', 'pix_guard_warned',
+  'pix_guard_continued',
+]);
+app.post('/api/eventos', (req: Request, res: Response) => {
+  const { name, detail } = req.body || {};
+  if (!EVENTOS_PERMITIDOS.has(name)) return res.status(400).json({ error: 'Evento desconhecido.' });
+  console.log(JSON.stringify({ severity: 'INFO', evento: name, detalhe: String(detail || '').slice(0, 200), cliente: PLANO_SNAPSHOT.id_usuario }));
+  return res.status(204).end();
 });
 
 async function startServer() {

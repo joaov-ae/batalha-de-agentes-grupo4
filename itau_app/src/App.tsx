@@ -41,7 +41,7 @@ export type MobileScreen =
 const FULL_SCREENS: MobileScreen[] = ['wizard', 'iai', 'iai_landing', 'meta_detail', 'simulador'];
 
 // Saldo/limite da conta (vêm de /api/pix/saldo) e limites dos cartões usados no Pix
-const INITIAL_SALDOS: PixSaldos = { conta: 17829.5, limiteConta: 28000, infinite: 24572.2, black: 13220.98 };
+const INITIAL_SALDOS: PixSaldos = { conta: 3776.24, limiteConta: 28000, infinite: 24572.2, black: 13220.98 };
 
 export default function App() {
   const [currentScreen, setCurrentScreen] = useState<MobileScreen>('hub');
@@ -53,8 +53,15 @@ export default function App() {
   // Saldos compartilhados por Home, Extrato e Pix; descontados a cada Pix e aporte
   const [saldos, setSaldos] = useState<PixSaldos>(INITIAL_SALDOS);
   const [extraTransactions, setExtraTransactions] = useState<ExtraTransaction[]>([]);
-  // Cada abertura do chat é uma conversa nova (key), com pergunta inicial ou jornada de meta opcionais
-  const [chatSession, setChatSession] = useState<{ key: number; initialPrompt?: string; goalFlow?: boolean }>({ key: 0 });
+  // Cada abertura do chat é uma conversa nova (key), com pergunta inicial ou jornadas opcionais
+  const [chatSession, setChatSession] = useState<{
+    key: number;
+    initialPrompt?: string;
+    goalFlow?: boolean;
+    salaryPlan?: boolean;
+  }>({ key: 0 });
+  // Opt-in "Pode me avisar": a ia.i avisa antes de um Pix que aperta o mês
+  const [pixGuard, setPixGuard] = useState(false);
   const [pixParams, setPixParams] = useState<PixTransferParams | undefined>(undefined);
 
   useEffect(() => {
@@ -154,7 +161,7 @@ export default function App() {
   };
 
   // Abre o chat da ia.i (sempre uma conversa nova)
-  const openChat = (opts: { initialPrompt?: string; goalFlow?: boolean } = {}) => {
+  const openChat = (opts: { initialPrompt?: string; goalFlow?: boolean; salaryPlan?: boolean } = {}) => {
     setChatSession((prev) => ({ key: prev.key + 1, ...opts }));
     setCurrentScreen('iai');
   };
@@ -259,6 +266,7 @@ export default function App() {
               onNavigate={studioNavigate}
               onOpenQuickPrompt={(prompt) => openChat({ initialPrompt: prompt })}
               onOpenNewGoalFlow={() => openChat({ goalFlow: true })}
+              onOpenSalaryPlan={() => openChat({ salaryPlan: true })}
               onSelectGoal={(goal) => {
                 setSelectedGoal(goal);
                 setCurrentScreen('meta_detail');
@@ -319,6 +327,9 @@ export default function App() {
               onPixDone={handlePixDone}
               initialPrompt={chatSession.initialPrompt}
               isGoalCreationFlow={chatSession.goalFlow}
+              salaryPlanMode={chatSession.salaryPlan}
+              pixGuard={pixGuard}
+              onPixGuardOptIn={() => setPixGuard(true)}
             />
           )}
 

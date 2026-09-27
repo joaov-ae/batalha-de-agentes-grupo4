@@ -39,7 +39,31 @@ Cloud Run itau-app  (server.ts, Express; SA squad-agent-sa)
 - Extrato: "Analisar com a ia.i" no detalhe do lançamento. Cartões: cartão virtual e bloqueio temporário.
 
 Saldo, metas, pontos e lançamentos novos ficam no estado do `App.tsx` (compartilhados entre as telas, só na
-sessão). O saldo vem de `/api/pix/saldo` (`MARIA_SALDO_FONTE=bigquery` usa o último `saldo_apos` da base).
+sessão). O saldo vem de `/api/pix/saldo` (saldo_hoje do `data_manager`).
+
+### Plano do mês no dia do salário (protótipo `prototipo-iai`)
+
+Botão flutuante "Seu salário caiu. Bora ver o mês?" → jornada no chat (`src/features/banking/PlanoSalario.tsx`):
+saídas até o salário → projeção negativa (gráfico da série diária) → corte de streaming → "Tem outro jeito?" →
+reagendar Pix vs. limite da conta → proposta com este mês e próximo mês → biometria → projeção recalculada e
+limite semanal → avisar quem recebe → opt-in "Pode me avisar" → avaliação (joinha + motivo).
+
+- **Cliente da demo ("Maria")**: `d6c59567-bb6d-4a01-a0bd-f9b6f811724b`, estado `vai_faltar` no `data_manager`.
+- **Números por regra, nunca pelo LLM**: o servidor chama o `data-manager-itau` (privado) com token de identidade
+  da SA (`roles/run.invoker`): `/status`, `/compromissos`, `/projecao`, `/ajustes`, `/recorrencias`,
+  `POST /simulacoes/transacao`, `POST /acoes/agendar-pix` (simulada) e `POST /memoria/decisoes`.
+  Sem acesso (ex.: local), usa `data/plano-salario-snapshot.json`.
+- **Próximo mês** (regra local): sobra após reagendar + entradas recorrentes − saídas recorrentes − gasto do dia a dia.
+- **Alerta antes do Pix** (após o opt-in): simula o Pix na projeção e avisa se deixa o mês negativo, sem bloquear.
+- **Eventos** (`POST /api/eventos`): log estruturado no Cloud Logging, com os mesmos nomes do protótipo.
+
+| Endpoint | Uso |
+|---|---|
+| `GET /api/plano-salario` | todos os números da jornada |
+| `POST /api/plano-salario/decisao` | ajuste aceito/recusado (memória do agente) |
+| `POST /api/plano-salario/reagendar` | reagendamento após a biometria |
+| `POST /api/pix/simular` | alerta antes do Pix |
+| `POST /api/eventos` | eventos da jornada |
 
 ## Dados
 

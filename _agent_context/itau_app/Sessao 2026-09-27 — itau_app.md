@@ -46,6 +46,20 @@ Registro das decisões tomadas ao publicar o front end no Cloud Run. Código em 
 - Correções junto: extrato não recalculava a lista quando os dados do BigQuery chegavam (dependência
   faltando no `useMemo`); "20 mil" era lido como R$ 20.
 
+## Jornada "plano do mês no dia do salário" (protótipo `prototipo-iai`)
+
+- A demo precisa de um cliente que feche o mês no negativo; a "Maria" passou a ser o cliente real
+  `d6c59567` (estado `vai_faltar` no data_manager): saldo R$ 3.776,24, fecha em −R$ 883,22 em 6/1, salário em 7/1.
+  Saldo, extrato e contatos usam esse cliente. Textos de persona (salário R$ 10.000, metas) não mudaram.
+- O corte de streaming (ficar só com o Globoplay) **não resolve** para esse cliente (−R$ 844,71); reagendar o
+  Pix de R$ 962,77 de 6/1 para 7/1 resolve (+R$ 79,55). O texto se adapta aos números (`resolve` de cada ajuste).
+- **Próximo mês fica negativo** (−R$ 517,17): as saídas recorrentes (R$ 7.687,30) superam as entradas
+  (R$ 7.383,22). O protótipo pede para conferir isso; a proposta mostra em vermelho com a explicação.
+- Sem dados de Cofrinho na base: a 2ª alternativa virou "deixar o limite da conta cobrir" (juros do data_manager).
+- Destinatário do Pix não tem nome na base ("pix transf terc"): aparece como "Pix agendado (transferência)" e o
+  card "Avisar quem recebe" abre o compartilhamento do celular (`navigator.share`).
+- Cards fora do caminho da demo mostram o aviso do protótipo e registram `path_not_in_demo`.
+
 ## Pendências / ideias
 
 - O áudio gravado só existe na sessão do navegador (não é salvo).

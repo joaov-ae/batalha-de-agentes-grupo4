@@ -74,7 +74,7 @@ export const ExtratoScreen: React.FC<ExtratoScreenProps> = ({
   className = '',
   extraTransactions = [],
   onAskIai,
-  saldo = 17829.5,
+  saldo = 3776.24,
   limiteConta = 28000,
 }) => {
   const [showBalance, setShowBalance] = useState(true);

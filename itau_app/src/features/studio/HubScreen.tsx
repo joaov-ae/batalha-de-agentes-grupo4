@@ -29,6 +29,8 @@ interface HubScreenProps {
   onOpenQuickPrompt: (prompt: string) => void;
   onOpenNewGoalFlow: () => void;
   onSelectGoal: (goal: FinancialGoal) => void;
+  /** Botão flutuante no dia do salário: abre a jornada "plano do mês" */
+  onOpenSalaryPlan: () => void;
   /** Saldo em conta e limite: os mesmos valores usados no fluxo de Pix */
   saldo: number;
   limiteConta: number;
@@ -43,6 +45,7 @@ export const HubScreen: React.FC<HubScreenProps> = ({
   onNavigate,
   onOpenNewGoalFlow,
   onSelectGoal,
+  onOpenSalaryPlan,
   saldo,
   limiteConta,
 }) => {
@@ -237,6 +240,7 @@ export const HubScreen: React.FC<HubScreenProps> = ({
               </span>
               <span className="text-slate-300 font-mono text-sm tracking-widest">•••</span>
             </div>
+            <span className="text-[11px] font-semibold text-[#1E8E3E] mt-1 block">+ Salário recebido hoje</span>
           </div>
 
           <div className="mt-3 pt-2.5 border-t border-slate-100 flex items-center justify-between">
@@ -365,8 +369,8 @@ export const HubScreen: React.FC<HubScreenProps> = ({
         </div>
       )}
 
-      {/* BOTÃO FLUTUANTE IA.I (recolhe em 3 s com transição suave) → Landing da ia.i */}
-      <IaiFloatingButton onClick={() => onNavigate('iai_landing')} />
+      {/* BOTÃO FLUTUANTE IA.I (recolhe em 3 s com transição suave) → jornada do plano do mês no dia do salário */}
+      <IaiFloatingButton label="Seu salário caiu. Bora ver o mês?" pulse onClick={onOpenSalaryPlan} />
     </div>
   );
 };

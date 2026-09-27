@@ -892,7 +892,7 @@ export const StandaloneStorybook: React.FC<StandaloneStorybookProps> = ({ onBack
               onBack={() => logAction('onBack:IaiChatScreen', {})}
               onGoalCreated={(goal) => logAction('onGoalCreated:IaiChatScreen', goal)}
               onNavigate={(screen) => logAction('onNavigate:IaiChatScreen', { screen })}
-              saldos={{ conta: 17829.5, limiteConta: 28000, infinite: 24572.2, black: 13220.98 }}
+              saldos={{ conta: 3776.24, limiteConta: 28000, infinite: 24572.2, black: 13220.98 }}
             />
           </div>
         );
