@@ -7,6 +7,7 @@ Esta pasta é destinada a centralizar e organizar documentos, anotações de ses
 Os arquivos são organizados em subpastas correspondentes a cada serviço ou frente do projeto:
 
 * **`data_manager/`**: Documentações, escopos e anotações de sessão referentes ao serviço de dados (`data_manager`).
+* **`itau_app/`**: Decisões e anotações de sessão do front end da demo (`itau_app`, Cloud Run `itau-app`).
 * *(Novas pastas de outros serviços devem ser adicionadas aqui conforme forem criados).*
 
 ## Como Usar com o Agente
