@@ -116,7 +116,7 @@ _ITENS = [
     ),
     ItemCatalogo(
         "E10", "entrada", "conteudo_nocivo",
-        "Conteúdo de ódio, assédio, sexual, perigoso ou links maliciosos (Model Armor).",
+        "Conteúdo de ódio, assédio, sexual, perigoso ou links maliciosos.",
         Decisao.bloquear,
         "Não responda ao conteúdo nocivo. Redirecione para o escopo financeiro.",
         "Não posso ajudar com esse tipo de conteúdo. " + _ESCOPO,
@@ -187,7 +187,7 @@ _ITENS = [
     ),
     ItemCatalogo(
         "S09", "saida", "conteudo_nocivo",
-        "Conteúdo de ódio, assédio, sexual, perigoso ou links maliciosos (Model Armor).",
+        "Conteúdo de ódio, assédio, sexual, perigoso ou links maliciosos.",
         Decisao.bloquear,
         "Não gere conteúdo nocivo. Mantenha a resposta no escopo financeiro.",
         "Não consegui gerar essa resposta agora. " + _ESCOPO,

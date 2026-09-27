@@ -15,7 +15,7 @@ class Settings(BaseSettings):
     # Camada 2 (semântica). Desligada, só as regras determinísticas rodam.
     semantico_habilitado: bool = True
     gemini_habilitado: bool = True
-    model_armor_habilitado: bool = True
+    model_armor_habilitado: bool = False
     modelo_gemini: str = "gemini-2.5-flash-lite"
     # Confiança mínima do Gemini para uma violação valer.
     confianca_minima_gemini: float = 0.7

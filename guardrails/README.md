@@ -14,18 +14,18 @@ pergunta ─► POST /v1/entrada ─ok─► LLM gera resposta ─► POST /v1/s
 | Camada | O que faz | Latência |
 |---|---|---|
 | 1. Regras (`app/regras/`) | Normaliza o texto (acentos, zero-width, leetspeak, letras espaçadas) e aplica regex/léxicos pré-compilados. Roda **sempre**. | ~0,2–1 ms |
-| 2. Gemini (`app/semantico/gemini.py`) | `gemini-2.5-flash-lite`, temperatura 0, sem thinking, saída JSON restrita aos códigos do catálogo. Pega ataques parafraseados. | ~500–850 ms (medido) |
-| 2. Model Armor (`app/semantico/model_armor.py`) | Filtros gerenciados do GCP: prompt injection/jailbreak, RAI (ódio, assédio, perigoso, sexual), URLs maliciosas. | em paralelo com o Gemini |
+| 2. Gemini (`app/semantico/gemini.py`) | `gemini-2.5-flash-lite`, temperatura 0, sem thinking, saída JSON restrita aos códigos do catálogo (incluindo E10/S09 conteúdo nocivo). | ~500–850 ms (medido) |
+| 2. Model Armor (`app/semantico/model_armor.py`) | *Opcional / desabilitado* (filtros gerenciados do GCP; mantido no código para ativação caso permissões sejam concedidas). | desabilitado por padrão |
 
 Regras de orquestração (`app/motor.py`):
 - **Short-circuit**: regra de severidade alta com decisão `bloquear` responde na hora, sem chamar rede.
 - **Suspeitas**: sinais ambíguos (ex.: "quanto doei pra igreja?", "me chame de Ana") não bloqueiam sozinhos;
   a camada 2 confirma ou não.
-- **Paralelo + orçamento**: Gemini e Model Armor rodam juntos com orçamento `TIMEOUT_SEMANTICO_MS` (1200 ms).
-  O que não voltar a tempo é ignorado: **fail-open** com o veredito das regras e `degradado=true` no log.
+- **Orçamento semântico**: Gemini roda com orçamento `TIMEOUT_SEMANTICO_MS` (1200 ms).
+  Se não voltar a tempo, é ignorado: **fail-open** com o veredito das regras e `degradado=true` no log.
 - **Modo por direção**: entrada `sempre`; saída `suspeito` (camada 2 só quando as regras marcaram algo), então
   a saída comum custa ~1 ms.
-- **Cache** LRU/TTL por texto normalizado; conexões com Gemini/Model Armor aquecidas na subida.
+- **Cache** LRU/TTL por texto normalizado; conexões com Gemini aquecidas na subida.
 
 ## Catálogo de respostas pré-estabelecidas (`GET /v1/catalogo`)
 
@@ -146,20 +146,20 @@ curl -s localhost:8081/v1/entrada -H 'content-type: application/json' \
 SA_AGENTE=<sa-do-agente>@batalha-time-04-z85x.iam.gserviceaccount.com ./deploy.sh
 ```
 
-Cria o template `guardrails-itau` no Model Armor (se não existir), builda a imagem, sobe
-`guardrails-itau` com `--no-allow-unauthenticated`, `min-instances=1` e `cpu-boost`, e dá `run.invoker` ao
-SA do agente. **Pré-requisito**: o SA de execução precisa de `roles/aiplatform.user` e
-`roles/modelarmor.user`; sem eles o serviço funciona só com as regras (`degradado=true`).
+Builda a imagem via Cloud Build, sobe `guardrails-itau` com `--no-allow-unauthenticated`,
+`min-instances=1` e `cpu-boost`, e dá permissão `run.invoker` ao SA do agente.
+**Pré-requisito**: o SA de execução (`squad-agent-sa`) precisa de `roles/aiplatform.user` no projeto (Gemini Vertex AI).
+Sem essa permissão, o serviço funciona apenas com as regras determinísticas (`degradado=true`).
 
 ## Configuração (env)
 
 | Variável | Padrão | Uso |
 |---|---|---|
 | `SEMANTICO_HABILITADO` | `true` | liga/desliga a camada 2 |
-| `GEMINI_HABILITADO` / `MODEL_ARMOR_HABILITADO` | `true` | liga/desliga cada avaliador |
+| `GEMINI_HABILITADO` | `true` | liga/desliga o avaliador Gemini |
+| `MODEL_ARMOR_HABILITADO` | `false` | liga/desliga o Model Armor (opcional) |
 | `MODELO_GEMINI` | `gemini-2.5-flash-lite` | modelo do classificador |
 | `CONFIANCA_MINIMA_GEMINI` | `0.7` | confiança mínima para valer |
-| `MODEL_ARMOR_TEMPLATE` | `guardrails-itau` | template na mesma região |
 | `TIMEOUT_SEMANTICO_MS` | `1200` | orçamento da camada 2 (fail-open ao estourar) |
 | `MODO_SEMANTICO_ENTRADA` / `_SAIDA` | `sempre` / `suspeito` | `sempre`, `suspeito` ou `nunca` |
 | `MAX_TENTATIVAS_SAIDA` | `2` | reescritas antes da resposta padrão |

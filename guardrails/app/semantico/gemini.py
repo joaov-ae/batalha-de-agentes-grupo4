@@ -14,9 +14,9 @@ from app.semantico.base import Direcao
 
 log = logging.getLogger(__name__)
 
-# E09/S07/S08 são objetivos (regex e contexto das tools); E10/S09 vêm do Model Armor.
-_ENTRADA = Literal["E01", "E02", "E03", "E04", "E05", "E06", "E07", "E08"]
-_SAIDA = Literal["S01", "S02", "S03", "S04", "S05", "S06"]
+# E09/S07/S08 são objetivos (regex e contexto das tools); E01-E08, E10 e S01-S06, S09 são avaliados pelo Gemini.
+_ENTRADA = Literal["E01", "E02", "E03", "E04", "E05", "E06", "E07", "E08", "E10"]
+_SAIDA = Literal["S01", "S02", "S03", "S04", "S05", "S06", "S09"]
 
 
 # Sem campo de evidência: menos tokens de saída = menor latência.
