@@ -1,0 +1,29 @@
+# Arquivos de Sistema Operacional
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Configurações de IDEs e Editores
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+*.sublime-project
+*.sublime-workspace
+
+# Variáveis de ambiente e segredos locais
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+
+# Logs e arquivos temporários
+*.log
+tmp/
+temp/
