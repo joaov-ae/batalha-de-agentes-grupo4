@@ -79,7 +79,7 @@ INTERVENCOES = Tabela(
         F("codigo", "STRING", "REQUIRED"),
         F("categoria", "STRING"),
         F("decisao", "STRING"),
-        F("camada", "STRING", description="regra, gemini ou model_armor (só guardrails)"),
+        F("camada", "STRING", description="regra, gemini, model_armor ou juiz_tom (só guardrails)"),
         F("degradado", "BOOLEAN"),
         F("tentativa", "INTEGER"),
         F("latencia_ms", "FLOAT"),

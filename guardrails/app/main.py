@@ -40,6 +40,15 @@ def _avaliadores(s) -> list:
             avaliadores.append(ClienteModelArmor(s.regiao, s.model_armor_template_nome))
         except Exception as e:  # noqa: BLE001
             log.warning("Model Armor indisponível, seguindo sem ele: %r", e)
+    if s.tom_habilitado:
+        try:
+            from app.semantico.juiz_tom import ClassificadorTom
+
+            avaliadores.append(ClassificadorTom(
+                s.projeto, s.regiao, s.modelo_tom, s.limiar_tom, s.timeout_semantico_ms
+            ))
+        except Exception as e:  # noqa: BLE001
+            log.warning("Juiz de Tom indisponível, seguindo sem ele: %r", e)
     return avaliadores
 
 
@@ -47,7 +56,8 @@ async def _aquecer(avaliadores: list) -> None:
     """Abre as conexões (TLS + token) na subida: a primeira chamada custa ~1,5 s e não pode cair num cliente."""
     async def um(a):
         try:
-            await asyncio.wait_for(a.avaliar("entrada", "olá, quanto sobra até o salário?", None), timeout=15)
+            direcao = "saida" if a.nome == "juiz_tom" else "entrada"
+            await asyncio.wait_for(a.avaliar(direcao, "olá, quanto sobra até o salário?", None), timeout=15)
             log.info("camada %s aquecida", a.nome)
         except Exception as e:  # noqa: BLE001
             log.warning("aquecimento de %s falhou (seguirá em fail-open se persistir): %r", a.nome, e)

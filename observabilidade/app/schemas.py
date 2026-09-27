@@ -131,6 +131,19 @@ class AjusteEvento(_Evento):
     resultado: ResultadoAjuste
 
 
+class TomEvento(_Evento):
+    """Envie após uma avaliação de tom pelo juiz de tom."""
+
+    conversa_id: str | None = None
+    mensagem_id: str | None = None
+    texto: str = Field(min_length=1, description="Texto da resposta do agente.")
+    nota: int = Field(ge=1, le=5, description="Nota de 1 a 5 atribuída pelo juiz de tom.")
+    aprovado: bool = Field(description="True se aprovado (nota >= limiar).")
+    justificativa: str = Field("", description="Justificativa do juiz.")
+    cenario: str | None = None
+    latencia_ms: float | None = None
+
+
 class EventoRegistrado(BaseModel):
     tabela: str
     ids: list[str]

@@ -29,6 +29,12 @@ class Settings(BaseSettings):
     modo_semantico_entrada: ModoSemantico = "sempre"
     modo_semantico_saida: ModoSemantico = "suspeito"
 
+    # Avaliador de Tom (LLM one-shot puro na saída)
+    tom_habilitado: bool = True
+    modelo_tom: str = "gemini-2.5-flash-lite"
+    limiar_tom: int = 3
+    modo_tom_saida: ModoSemantico = "sempre"
+
     # Na saída, a partir desta tentativa o "reescrever" vira resposta padrão (o agente não tenta de novo).
     max_tentativas_saida: int = 2
     # Falas do histórico enviadas ao Gemini (ataques em várias mensagens).

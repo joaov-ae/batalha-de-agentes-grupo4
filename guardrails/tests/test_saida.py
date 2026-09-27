@@ -51,3 +51,23 @@ def test_valor_inventado_e_detectado_e_arredondamento_e_tolerado():
     assert numeros_sem_suporte("O Pix de R$ 300 ...", CONTEXTO, "pix de 300") == []
     # Sem contexto das tools, a regra não se aplica.
     assert numeros_sem_suporte("Sobram R$ 1.900,00", None, None) == []
+
+
+@pytest.mark.asyncio
+async def test_juiz_tom_violacao_s10():
+    from unittest.mock import AsyncMock, patch
+    from app.semantico.juiz_tom import ClassificadorTom, VereditoTom
+
+    juiz = ClassificadorTom("projeto", "regiao", "modelo", limiar=3, timeout_ms=1000)
+    veredito_ruim = VereditoTom(justificativa="Tom agressivo e autoritário", nota=1, aprovado=False)
+
+    with patch.object(juiz, "julgar_direto", new_callable=AsyncMock) as mock_julgar:
+        mock_julgar.return_value = veredito_ruim
+        violacoes = await juiz.avaliar("saida", "Corte seus gastos AGORA!", None)
+        assert len(violacoes) == 1
+        assert violacoes[0].codigo == "S10"
+        assert violacoes[0].camada == "juiz_tom"
+        assert "nota 1/5" in violacoes[0].evidencia
+
+        # Na entrada não deve avaliar
+        assert await juiz.avaliar("entrada", "Corte seus gastos AGORA!", None) == []

@@ -125,6 +125,8 @@ def _colunas(tabela: str) -> set[str]:
         ("ajuste", "ajustes_oferecidos", {"id_usuario": "u1", "tipo": "mudanca_data", "valor": 250.0,
                                           "resultado": "aceito"}),
         ("intervencao", "intervencoes", {"id_usuario": "u1", "codigo": "AG_FILTRO_NUMERO"}),
+        ("tom", "intervencoes", {"id_usuario": "u1", "texto": "Oi", "nota": 2, "aprovado": False,
+                                 "justificativa": "Tom inadequado"}),
     ],
 )
 def test_eventos_gravam_colunas_do_schema(client, store, rota, tabela, corpo) -> None:
@@ -155,6 +157,50 @@ def test_intervencao_com_veredito_do_guardrails(client, store) -> None:
     assert [ln["codigo"] for ln in linhas] == ["E02", "E04"]
     assert all(ln["fonte"] == "guardrails" and ln["direcao"] == "entrada" for ln in linhas)
     assert set(linhas[0]) == _colunas("intervencoes")
+
+
+def test_tom_aprovado_nao_grava_intervencao(client, store) -> None:
+    r = client.post("/v1/eventos/tom", json={
+        "id_usuario": "u1", "texto": "Olá, tudo bem?", "nota": 5, "aprovado": True, "justificativa": "Tom empático",
+    })
+    assert r.status_code == 201
+    assert store.inseridos.get("intervencoes", []) == []
+    assert r.json()["ids"] == []
+
+
+
+def test_tom_reprovado_grava_intervencao_s10(client, store) -> None:
+    r = client.post("/v1/eventos/tom", json={
+        "id_usuario": "u1", "conversa_id": "c1", "mensagem_id": "m1",
+        "texto": "Se vire!", "nota": 1, "aprovado": False, "justificativa": "Tom grosseiro", "latencia_ms": 850.0,
+    })
+    assert r.status_code == 201
+    linhas = store.inseridos["intervencoes"]
+    assert len(linhas) == 1
+    ln = linhas[0]
+    assert ln["fonte"] == "juiz_tom"
+    assert ln["codigo"] == "S10"
+    assert ln["camada"] == "juiz_tom"
+    assert ln["decisao"] == "reescrever"
+    assert ln["latencia_ms"] == 850.0
+    assert set(ln) == _colunas("intervencoes")
+
+
+def test_intervencao_com_veredito_guardrails_s10(client, store) -> None:
+    veredito = {
+        "decisao": "reescrever", "permitido": False, "degradado": False, "latencia_ms": 910.0,
+        "violacoes": [
+            {"codigo": "S10", "categoria": "tom_inadequado", "severidade": "media", "camada": "juiz_tom"},
+        ],
+    }
+    r = client.post("/v1/eventos/intervencao", json={"id_usuario": "u1", "mensagem_id": "m1", "veredito": veredito})
+    assert r.status_code == 201
+    linhas = store.inseridos["intervencoes"]
+    assert len(linhas) == 1
+    assert linhas[0]["codigo"] == "S10"
+    assert linhas[0]["fonte"] == "guardrails"
+    assert linhas[0]["camada"] == "juiz_tom"
+
 
 
 @pytest.mark.parametrize(

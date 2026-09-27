@@ -73,12 +73,39 @@ class Motor:
         self.avaliadores = avaliadores or []
         self.cache = CacheTTL(settings.cache_tamanho, settings.cache_ttl_s)
 
+    def _deve_rodar(self, avaliador: Avaliador, direcao: Direcao, achados: list[Achado]) -> bool:
+        if not self.settings.semantico_habilitado:
+            return False
+        # Short-circuit: regra de alta severidade que bloqueia já decide; não gasta rede.
+        if any(a.severidade == Severidade.alta and CATALOGO[a.codigo].decisao == Decisao.bloquear for a in achados):
+            return False
+
+        if avaliador.nome == "juiz_tom":
+            if direcao != "saida" or not self.settings.tom_habilitado:
+                return False
+            modo = self.settings.modo_tom_saida
+            if modo == "nunca":
+                return False
+            if modo == "suspeito":
+                return any(a.severidade == Severidade.media for a in achados)
+            return True
+
+        modo = self.settings.modo_semantico_entrada if direcao == "entrada" else self.settings.modo_semantico_saida
+        if modo == "nunca":
+            return False
+        if modo == "suspeito":
+            return any(a.severidade == Severidade.media for a in achados)
+        return True
+
     # ------------------------------------------------------------------ camada semântica
-    async def _semantico(self, direcao: Direcao, texto: str, contexto: str | None) -> tuple[list[Violacao], list[str], bool]:
+    async def _semantico(
+        self, direcao: Direcao, texto: str, contexto: str | None, achados: list[Achado]
+    ) -> tuple[list[Violacao], list[str], bool]:
         """(violações, camadas que responderam, degradado)."""
-        if not self.avaliadores:
+        ativos = [a for a in self.avaliadores if self._deve_rodar(a, direcao, achados)]
+        if not ativos:
             return [], [], False
-        tarefas = {asyncio.create_task(a.avaliar(direcao, texto, contexto)): a.nome for a in self.avaliadores}
+        tarefas = {asyncio.create_task(a.avaliar(direcao, texto, contexto)): a.nome for a in ativos}
         feitas, pendentes = await asyncio.wait(tarefas, timeout=self.settings.timeout_semantico_ms / 1000)
         for t in pendentes:
             # Não cancela: cancelar derruba a conexão HTTP/gRPC e a próxima chamada paga o handshake de novo.
@@ -96,16 +123,6 @@ class Motor:
             camadas.append(tarefas[t])
             violacoes.extend(t.result())
         return violacoes, camadas, degradado
-
-    def _deve_rodar_semantico(self, modo: str, achados: list[Achado]) -> bool:
-        if not self.settings.semantico_habilitado or not self.avaliadores or modo == "nunca":
-            return False
-        # Short-circuit: regra de alta severidade que bloqueia já decide; não gasta rede.
-        if any(a.severidade == Severidade.alta and CATALOGO[a.codigo].decisao == Decisao.bloquear for a in achados):
-            return False
-        if modo == "suspeito":
-            return any(a.severidade == Severidade.media for a in achados)
-        return True
 
     # ------------------------------------------------------------------ montagem do veredito
     def _montar(
@@ -173,9 +190,7 @@ class Motor:
             veredito = veredito.model_copy(update={"cache": True})
         else:
             achados = regras_entrada.avaliar(req.mensagem)
-            semanticas, camadas, degradado = [], [], False
-            if self._deve_rodar_semantico(self.settings.modo_semantico_entrada, achados):
-                semanticas, camadas, degradado = await self._semantico("entrada", req.mensagem, contexto)
+            semanticas, camadas, degradado = await self._semantico("entrada", req.mensagem, contexto, achados)
             veredito = self._montar(achados, semanticas, ["regra", *camadas], degradado, req.mensagem, incluir_uuid=False)
             if not degradado:
                 self.cache.set(chave, veredito.model_copy(deep=True))
@@ -192,9 +207,7 @@ class Motor:
             veredito = veredito.model_copy(update={"cache": True})
         else:
             achados = regras_saida.avaliar(req.resposta, req.mensagem_usuario, req.contexto_tools)
-            semanticas, camadas, degradado = [], [], False
-            if self._deve_rodar_semantico(self.settings.modo_semantico_saida, achados):
-                semanticas, camadas, degradado = await self._semantico("saida", req.resposta, req.mensagem_usuario)
+            semanticas, camadas, degradado = await self._semantico("saida", req.resposta, req.mensagem_usuario, achados)
             veredito = self._montar(achados, semanticas, ["regra", *camadas], degradado, req.resposta, incluir_uuid=True)
             # Última tentativa: em vez de pedir outra reescrita, entrega a resposta padrão.
             if ultima and veredito.decisao == Decisao.reescrever:
