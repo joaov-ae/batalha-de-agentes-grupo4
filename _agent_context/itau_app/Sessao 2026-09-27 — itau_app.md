@@ -1,0 +1,39 @@
+# Sessão 2026-09-26/27 — itau_app (front end da demo)
+
+Registro das decisões tomadas ao publicar o front end no Cloud Run. Código em `itau_app/`.
+
+## Origem
+
+- Protótipo exportado do Google AI Studio ("Itaú Banking & Design System Storybook"): React + Vite +
+  Tailwind com um servidor Express (`server.ts`). Não é só estático: o servidor expõe as APIs `/api/*`.
+
+## Deploy
+
+- Serviço Cloud Run `itau-app`, região `us-central1`, público (`--allow-unauthenticated`).
+  URL: https://itau-app-313377205892.us-central1.run.app
+- Imagem no repositório Artifact Registry `agentes` (us-central1). Nossa conta não pode criar
+  repositórios nem habilitar APIs, então `gcloud run deploy --source` não funciona; usamos build Docker + push.
+- Roda com a SA `squad-agent-sa` (a mesma do `data-manager-itau`): tem `aiplatform.user` e `bigquery.jobUser`.
+  Com a SA default do Compute, BigQuery e Vertex AI retornam 403 e o app usa dados de exemplo.
+
+## Decisões
+
+- **Segurança**: o endpoint de extrato aceitava `?sql=` e executava SQL arbitrário com a SA. Removido;
+  todas as consultas são fixas e parametrizadas.
+- **Gemini sem chave**: no Cloud Run usa Vertex AI (`gemini-3.8-flash`, location `global`; em
+  `us-central1` o modelo retorna 404). `GEMINI_API_KEY`, se definida, tem prioridade.
+- **Pix pelo chat**: a base `hackathon_dados` não tem nomes. O nome digitado mapeia de forma
+  determinística para 1–2 `id_usuario` que fazem "pix transf"; banco/sobrenome/chave são gerados do id.
+  Cliente demo "Maria" = `139aae21-0535-4a19-bbf2-d2b8f0c7a0d8` (saldo R$ 1.744,32, perto dos R$ 1.800 do
+  protótipo). Saldo insuficiente → mostra o saldo negativo e bloqueia todas as formas de pagamento.
+- **Voz**: o áudio é enviado como mensagem (balão), sem mostrar o texto durante a gravação. O Gemini
+  devolve transcrição + intenção de Pix (valor, destinatário) em JSON, porque frases como
+  "faz uma transferência…" ou "manda 20 reais…" não eram reconhecidas por palavra-chave e caíam no chat
+  geral, que pedia a chave Pix. Cloud Speech-to-Text não está habilitado no projeto.
+- **Extrato**: com o BigQuery ao vivo, a consulta passou a trazer as 100 transações mais recentes da Maria
+  já no formato da tela (`data`, `descricao`, `valor`, `categoria`...).
+
+## Pendências / ideias
+
+- O áudio gravado só existe na sessão do navegador (não é salvo).
+- Saldo e limites descontados após um Pix são só da sessão (recarregar volta ao valor da base).
