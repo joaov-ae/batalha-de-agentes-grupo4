@@ -287,6 +287,7 @@ export const IaiChatScreen: React.FC<IaiChatScreenProps> = ({
   const [plano, setPlano] = useState<PlanoSalarioData | null>(null);
   const [bioOpen, setBioOpen] = useState(false);
   const planoRef = useRef<PlanoSalarioData | null>(null);
+  const sessionIdRef = useRef<string>(`session-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`);
 
   // Stepped conversational loading progress for IA.i response:
   const [loadingStep, setLoadingStep] = useState<number>(0);
@@ -760,9 +761,13 @@ export const IaiChatScreen: React.FC<IaiChatScreenProps> = ({
       // Fallback or API request
       const response = await fetch('/api/gemini/chat', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Session-ID': sessionIdRef.current,
+        },
         body: JSON.stringify({
           userMessage: text,
+          sessionId: sessionIdRef.current,
           messages: messages.map((m) => ({ role: m.sender === 'user' ? 'user' : 'model', text: m.text })),
         }),
       });
