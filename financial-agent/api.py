@@ -7,7 +7,6 @@ import time
 import unicodedata
 import uuid
 from functools import lru_cache
-from typing import Any
 
 import firebase_admin
 from fastapi import BackgroundTasks, FastAPI, Header, HTTPException, Response
@@ -311,9 +310,7 @@ def _is_dangerous_verdict(verdict: dict, text_to_check: str) -> bool:
     for v in violacoes:
         if isinstance(v, dict) and v.get("codigo") in dangerous_codes:
             return True
-    if contains_protected_terms(text_to_check):
-        return True
-    return False
+    return bool(contains_protected_terms(text_to_check))
 
 
 async def _guard_chat_output(
@@ -670,6 +667,17 @@ async def _pos_processar_chat(
                 veredito=exit_verdict,
                 tentativa=2 if reescrita else 1,
             )
+            if any(v.get("codigo") == "S10" for v in exit_verdict.get("violacoes", []) if isinstance(v, dict)):
+                await emitir_tom(
+                    id_usuario=user_id,
+                    conversa_id=conversa_id,
+                    mensagem_id=msg_agent_id,
+                    texto=agent_message,
+                    nota=2 if reescrita else 1,
+                    aprovado=not reescrita,
+                    justificativa="Avaliação de tom na interação",
+                    latencia_ms=latencia_ms,
+                )
         elif codigo_agente:
             await emitir_intervencao(
                 id_usuario=user_id,
@@ -1163,7 +1171,7 @@ async def chat(
         trace_ctx.record_span("llm_gen", (time.perf_counter() - t_llm) * 1000)
 
         # 6. Validação Estrita de Saída com Guardrails e Juiz de Tom
-        final_answer, exit_verdict, is_rewritten, tone_reiterated = await _guard_chat_output(
+        final_answer, exit_verdict, is_rewritten, _tone_reiterated = await _guard_chat_output(
             answer=answer,
             user_id=user_id,
             user_message=request.message,

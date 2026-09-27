@@ -43,7 +43,7 @@ class SessionMemoryStore:
         self._max_sessoes = max_sessoes
         self._ttl_segundos = ttl_segundos
         self._sessoes: dict[str, SessionState] = {}
-        self._lock = threading.Lock()
+        self._lock = threading.RLock()
 
     def obter_ou_criar(
         self,

@@ -633,7 +633,7 @@ class FinanceContextTests(unittest.TestCase):
         ) as output_check:
             response = client.post("/chat", json={
                 "user_id": self.demo_user_id,
-                "message": "Pergunta do usuário",
+                "message": "Como posso cortar gastos no orçamento?",
             }, headers=self.demo_headers)
 
         self.assertEqual(response.status_code, 200)
@@ -664,7 +664,7 @@ class FinanceContextTests(unittest.TestCase):
         ) as output_check:
             response = client.post("/chat", json={
                 "user_id": self.demo_user_id,
-                "message": "Como fechar o mês?",
+                "message": "Como fechar o mes com mais saldo?",
             }, headers=self.demo_headers)
 
         self.assertEqual(response.status_code, 200)
@@ -699,7 +699,7 @@ class FinanceContextTests(unittest.TestCase):
             client.post("/chat", json={
                 "user_id": self.demo_user_id,
                 "session_id": test_session,
-                "message": "Qual é a melhor opção?",
+                "message": "Qual é a melhor opção de economia?",
             }, headers=self.demo_headers)
 
             # Verifica se o histórico foi enviado no quarto argumento de generate_chat_message
