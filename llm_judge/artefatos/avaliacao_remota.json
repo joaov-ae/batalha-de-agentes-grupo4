@@ -1,0 +1,48 @@
+{
+  "remoto": {
+    "n": 47,
+    "acuracia": 0.787,
+    "falsa_reprovacao": 0.071,
+    "falsa_aprovacao": 0.421,
+    "mae_nota": 0.681,
+    "matriz": {
+      "vp": 26,
+      "vn": 11,
+      "fp": 8,
+      "fn": 2
+    },
+    "falhas_parse": 0
+  },
+  "local": {
+    "n": 47,
+    "acuracia": 0.809,
+    "falsa_reprovacao": 0.107,
+    "falsa_aprovacao": 0.316,
+    "mae_nota": 0.617,
+    "matriz": {
+      "vp": 25,
+      "vn": 13,
+      "fp": 6,
+      "fn": 3
+    },
+    "falhas_parse": 0
+  },
+  "concordancia_aprovacao_remoto_x_local": 0.936,
+  "latencia_s": {
+    "p50": 2.38,
+    "p95": 2.84,
+    "max": 3.07
+  },
+  "erros_remoto": [
+    "MSG-001",
+    "MSG-007",
+    "MSG-012",
+    "MSG-025",
+    "MSG-062",
+    "MSG-073",
+    "MSG-091",
+    "MSG-092",
+    "MSG-098",
+    "MSG-100"
+  ]
+}
