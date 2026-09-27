@@ -28,6 +28,7 @@ fi
 gcloud run deploy financial-agent --project "${PROJETO}" --region "${REGIAO}" \
   --image "${IMAGEM}" --service-account "${SA}" \
   --no-allow-unauthenticated \
+  --min-instances=1 \
   --memory=512Mi --cpu=1 --timeout=120s \
   --set-env-vars="GOOGLE_CLOUD_PROJECT=${PROJETO},DATA_MANAGER_URL=${DATA_MANAGER_URL},GUARDRAILS_URL=${GUARDRAILS_URL},OBSERVABILIDADE_URL=${OBSERVABILIDADE_URL},DEMO_MODE=true,DEMO_ACCESS_TOKEN=demo-hackathon-key" \
   --set-secrets="GEMINI_API_KEY=gemini-api-key:latest"

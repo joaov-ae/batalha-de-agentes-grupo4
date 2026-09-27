@@ -768,20 +768,84 @@ export const IaiChatScreen: React.FC<IaiChatScreenProps> = ({
         body: JSON.stringify({
           userMessage: text,
           sessionId: sessionIdRef.current,
+          stream: true,
           messages: messages.map((m) => ({ role: m.sender === 'user' ? 'user' : 'model', text: m.text })),
         }),
       });
 
-      const data = await response.json();
+      const contentType = response.headers.get('content-type') || '';
+      if (response.ok && contentType.includes('text/event-stream') && response.body) {
+        clearInterval(stepInterval);
+        setIsLoading(false);
 
-      const iaiMsg: ChatMessage = {
-        id: `iai-${Date.now()}`,
-        sender: 'iai',
-        text: data.text || `Entendi, ${cliente.primeiroNome}. Posso te ajudar com detalhes sobre seus cartões Personnalité, CDB ou planejamento de gastos.`,
-        timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-      };
+        const msgId = `iai-${Date.now()}`;
+        let accumulatedText = '';
+        const timestamp = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 
-      setMessages((prev) => [...prev, iaiMsg]);
+        setMessages((prev) => [
+          ...prev,
+          {
+            id: msgId,
+            sender: 'iai',
+            text: '',
+            timestamp,
+          },
+        ]);
+
+        const reader = response.body.getReader();
+        const decoder = new TextDecoder('utf-8');
+        let buffer = '';
+
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          buffer += decoder.decode(value, { stream: true });
+          const lines = buffer.split('\n');
+          buffer = lines.pop() || '';
+
+          for (const line of lines) {
+            const trimmed = line.trim();
+            if (!trimmed || !trimmed.startsWith('data:')) continue;
+            const dataStr = trimmed.replace(/^data:\s*/, '');
+            if (dataStr === '[DONE]') break;
+            try {
+              const parsed = JSON.parse(dataStr);
+              if (parsed.text) {
+                accumulatedText += parsed.text;
+                setMessages((prev) =>
+                  prev.map((m) => (m.id === msgId ? { ...m, text: accumulatedText } : m))
+                );
+              }
+            } catch {
+              // ignore non-json chunk
+            }
+          }
+        }
+
+        if (!accumulatedText.trim()) {
+          setMessages((prev) =>
+            prev.map((m) =>
+              m.id === msgId
+                ? {
+                    ...m,
+                    text: `Entendi, ${cliente.primeiroNome}. Posso te ajudar com detalhes sobre seus cartões Personnalité, CDB ou planejamento de gastos.`,
+                  }
+                : m
+            )
+          );
+        }
+      } else {
+        const data = await response.json();
+
+        const iaiMsg: ChatMessage = {
+          id: `iai-${Date.now()}`,
+          sender: 'iai',
+          text: data.text || `Entendi, ${cliente.primeiroNome}. Posso te ajudar com detalhes sobre seus cartões Personnalité, CDB ou planejamento de gastos.`,
+          timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+        };
+
+        setMessages((prev) => [...prev, iaiMsg]);
+      }
     } catch (err) {
       console.error(err);
       setMessages((prev) => [
@@ -1322,6 +1386,7 @@ export const IaiChatScreen: React.FC<IaiChatScreenProps> = ({
 
   const handleFeedback = (msgId: string, type: 'up' | 'down') => {
     setFeedbackGiven((prev) => ({ ...prev, [msgId]: type }));
+    logEvento('feedback', type);
     notify(type === 'up' ? 'Obrigado pelo feedback!' : 'Feedback registrado para melhoria.');
   };
 

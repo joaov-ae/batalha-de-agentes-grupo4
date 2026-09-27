@@ -68,6 +68,84 @@ app.post('/api/gemini/chat', async (req: Request, res: Response) => {
     const prompt = userMessage || (messages && messages[messages.length - 1]?.text) || 'Olá Ia.i!';
     const perfil = await montarPerfilCliente();
 
+    // Se o cliente pediu streaming (SSE)
+    if (req.body?.stream) {
+      res.setHeader('Content-Type', 'text/event-stream');
+      res.setHeader('Cache-Control', 'no-cache');
+      res.setHeader('Connection', 'keep-alive');
+      res.flushHeaders?.();
+
+      const emitChunk = (textChunk: string) => {
+        res.write(`data: ${JSON.stringify({ text: textChunk })}\n\n`);
+      };
+
+      // 1. Tenta delegar primeiro para o Financial Agent
+      try {
+        const agentUrl = FINANCIAL_AGENT_URL.replace(/\/$/, '');
+        const token = await getIdToken(agentUrl);
+        const headers: Record<string, string> = {
+          'Content-Type': 'application/json',
+          'X-Demo-Access-Key': 'demo-hackathon-key',
+        };
+        if (token) headers['Authorization'] = `Bearer ${token}`;
+        if (sessionId) headers['X-Session-ID'] = String(sessionId);
+
+        const agentRes = await fetch(`${agentUrl}/chat`, {
+          method: 'POST',
+          headers,
+          body: JSON.stringify({
+            user_id: perfil.idUsuario,
+            message: prompt,
+            session_id: sessionId || undefined,
+          }),
+          signal: AbortSignal.timeout(6000),
+        });
+
+        if (agentRes.ok) {
+          const agentData = await agentRes.json();
+          if (agentData?.mensagem) {
+            const words = agentData.mensagem.split(/(\s+)/);
+            for (const word of words) {
+              emitChunk(word);
+              await new Promise((r) => setTimeout(r, 15));
+            }
+            res.write('data: [DONE]\n\n');
+            return res.end();
+          }
+        }
+      } catch (agentErr) {
+        console.warn('Financial Agent indisponível ou timeout, caindo para streaming Gemini:', agentErr instanceof Error ? agentErr.message : agentErr);
+      }
+
+      // 2. Stream nativo do Gemini
+      if (!geminiEnabled) {
+        const text = `Olá, ${perfil.primeiroNome}! Sou a **ia.i**. Sua renda recorrente é de **${fmtBRL(perfil.renda.mensal)}** e as despesas fixas somam **${fmtBRL(perfil.fixas.total)}** (${perfil.fixas.percentualRenda.toFixed(1)}%). Sobram ${fmtBRL(perfil.sobraAposFixas)} para o resto do mês. Como posso te ajudar a programar os gastos?`;
+        for (const word of text.split(/(\s+)/)) {
+          emitChunk(word);
+          await new Promise((r) => setTimeout(r, 20));
+        }
+        res.write('data: [DONE]\n\n');
+        return res.end();
+      }
+
+      const responseStream = await ai.models.generateContentStream({
+        model: GEMINI_MODEL,
+        contents: prompt,
+        config: {
+          systemInstruction: montarSystemInstruction(perfil),
+          temperature: 0.7,
+        },
+      });
+
+      for await (const chunk of responseStream) {
+        const chunkText = chunk.text || '';
+        if (chunkText) emitChunk(chunkText);
+      }
+      res.write('data: [DONE]\n\n');
+      return res.end();
+    }
+
+    // Modo JSON tradicional (sem streaming)
     // 1. Tenta delegar para o Financial Agent oficial (orquestrador com Guardrails + Juiz de Tom)
     try {
       const agentUrl = FINANCIAL_AGENT_URL.replace(/\/$/, '');
@@ -636,6 +714,7 @@ app.get('/api/pix/saldo', async (_req: Request, res: Response) => {
 // Sem acesso ao data_manager (ex.: rodando local), usa a cópia em data/plano-salario-snapshot.json.
 const DATA_MANAGER_URL = process.env.DATA_MANAGER_URL || 'https://data-manager-itau-zqj7scngrq-uc.a.run.app';
 const FINANCIAL_AGENT_URL = process.env.FINANCIAL_AGENT_URL || 'https://financial-agent-313377205892.us-central1.run.app';
+const OBSERVABILIDADE_URL = process.env.OBSERVABILIDADE_URL || 'https://observabilidade-itau-313377205892.us-central1.run.app';
 const PLANO_SNAPSHOT = JSON.parse(fs.readFileSync(path.resolve('data/plano-salario-snapshot.json'), 'utf8'));
 
 // Nomes amigáveis para as descrições do extrato sintético
@@ -1117,6 +1196,67 @@ app.post('/api/eventos', (req: Request, res: Response) => {
   const { name, detail } = req.body || {};
   if (!EVENTOS_PERMITIDOS.has(name)) return res.status(400).json({ error: 'Evento desconhecido.' });
   console.log(JSON.stringify({ severity: 'INFO', evento: name, detalhe: String(detail || '').slice(0, 200), cliente: PLANO_SNAPSHOT.id_usuario }));
+
+  // Ingestão assíncrona ao vivo no BigQuery da Observabilidade (sem travar o cliente)
+  (async () => {
+    try {
+      const obsUrl = OBSERVABILIDADE_URL.replace(/\/$/, '');
+      const token = await getIdToken(obsUrl);
+      const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+      if (token) headers['Authorization'] = `Bearer ${token}`;
+
+      if (name === 'feedback') {
+        const voto = String(detail).toLowerCase().includes('down') ? 'down' : 'up';
+        const body: Record<string, any> = {
+          id_usuario: PLANO_SNAPSHOT.id_usuario,
+          mensagem_id: `msg-live-${Date.now()}`,
+          voto,
+        };
+        if (voto === 'down') {
+          if (String(detail).includes('insistente')) body.motivo = 'insistente';
+          else if (String(detail).includes('numero')) body.motivo = 'numero_errado';
+          else if (String(detail).includes('escopo')) body.motivo = 'fora_do_escopo';
+          else body.motivo = 'nao_entendi';
+        }
+        await fetch(`${obsUrl}/v1/eventos/feedback`, {
+          method: 'POST',
+          headers,
+          body: JSON.stringify(body),
+          signal: AbortSignal.timeout(4000),
+        });
+      } else if (name === 'alert_opt_in') {
+        await fetch(`${obsUrl}/v1/eventos/alerta`, {
+          method: 'POST',
+          headers,
+          body: JSON.stringify({
+            id_usuario: PLANO_SNAPSHOT.id_usuario,
+            momento: 'salario',
+            status_alerta: 'saldo_estimado_no_limite',
+            consentiu: true,
+          }),
+          signal: AbortSignal.timeout(4000),
+        });
+      } else if (name === 'suggestion_accepted' || name === 'suggestion_rejected') {
+        const isCancelSub = String(detail).includes('cancel_subscription');
+        const tipo = isCancelSub ? 'assinatura_redundante' : 'mudanca_data';
+        const valor = isCancelSub ? 59.90 : 191.36;
+        await fetch(`${obsUrl}/v1/eventos/ajuste`, {
+          method: 'POST',
+          headers,
+          body: JSON.stringify({
+            id_usuario: PLANO_SNAPSHOT.id_usuario,
+            tipo,
+            valor,
+            resultado: name === 'suggestion_accepted' ? 'aceito' : 'recusado',
+          }),
+          signal: AbortSignal.timeout(4000),
+        });
+      }
+    } catch (obsErr) {
+      console.warn('Observabilidade ingestão em background:', obsErr instanceof Error ? obsErr.message : obsErr);
+    }
+  })();
+
   return res.status(204).end();
 });
 

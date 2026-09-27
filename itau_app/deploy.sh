@@ -31,6 +31,7 @@ fi
 # 2. Serviço (público: é o front end da demo)
 gcloud run deploy itau-app --project "${PROJETO}" --region "${REGIAO}" \
   --image "${IMAGEM}" --service-account "${SA}" \
+  --min-instances=1 \
   --allow-unauthenticated
 
 URL=$(gcloud run services describe itau-app --project "${PROJETO}" --region "${REGIAO}" --format 'value(status.url)')
