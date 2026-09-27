@@ -26,15 +26,33 @@ import {
   RefreshCw,
   ExternalLink,
   AlertCircle,
+  Sparkles,
 } from 'lucide-react';
 import { PixIcon } from '../../design-system/atoms/PixIcon';
 import { TransactionRow } from '../../design-system/molecules/TransactionRow';
 import { ItauButton } from '../../design-system/atoms/ItauButton';
 
+/** Lançamento criado no app nesta sessão (ex.: aporte em meta), exibido no topo do extrato */
+export interface ExtraTransaction {
+  id: string;
+  title: string;
+  subtitle: string;
+  amount: number;
+  type: 'income' | 'expense';
+}
+
 export interface ExtratoScreenProps {
   onBack: () => void;
   className?: string;
+  extraTransactions?: ExtraTransaction[];
+  /** Abre a ia.i perguntando sobre o impacto de um lançamento */
+  onAskIai?: (title: string) => void;
+  /** Saldo e limite da conta: os mesmos valores da Home e do Pix */
+  saldo?: number;
+  limiteConta?: number;
 }
+
+const brl = (v: number) => v.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 
 interface TransactionItem {
   id: string;
@@ -54,6 +72,10 @@ interface TransactionItem {
 export const ExtratoScreen: React.FC<ExtratoScreenProps> = ({
   onBack,
   className = '',
+  extraTransactions = [],
+  onAskIai,
+  saldo = 17829.5,
+  limiteConta = 28000,
 }) => {
   const [showBalance, setShowBalance] = useState(true);
   const [selectedPeriod, setSelectedPeriod] = useState<'7' | '15' | '30' | 'mes'>('mes');
@@ -294,9 +316,43 @@ export const ExtratoScreen: React.FC<ExtratoScreenProps> = ({
     fetchBqData();
   }, []);
 
+  // Lançamentos feitos nesta sessão (aportes em metas) aparecem no topo, em "Hoje"
+  const allTransactions = useMemo<TransactionItem[]>(
+    () => [
+      ...extraTransactions.map((tx, idx) => ({
+        id: tx.id,
+        dateGroup: 'Hoje',
+        title: tx.title,
+        subtitle: tx.subtitle,
+        amount: tx.amount,
+        type: tx.type,
+        category: 'investimento' as const,
+        icon: <TrendingUp className="w-4 h-4" />,
+        iconBg: 'orange' as const,
+        authCode: `APORTE-${idx + 1}`,
+        timestamp: 'Hoje',
+      })),
+      ...transactions,
+    ],
+    [extraTransactions, transactions],
+  );
+
+  // Entradas e saídas somadas a partir dos lançamentos exibidos
+  const totals = useMemo(
+    () =>
+      allTransactions.reduce(
+        (acc, tx) => {
+          acc[tx.type === 'income' ? 'income' : 'expense'] += tx.amount;
+          return acc;
+        },
+        { income: 0, expense: 0 },
+      ),
+    [allTransactions],
+  );
+
   // Filtering transactions
   const filteredTransactions = useMemo(() => {
-    return transactions.filter((tx) => {
+    return allTransactions.filter((tx) => {
       // Category filter
       if (selectedCategory !== 'todos' && tx.category !== selectedCategory) {
         return false;
@@ -311,7 +367,7 @@ export const ExtratoScreen: React.FC<ExtratoScreenProps> = ({
       }
       return true;
     });
-  }, [selectedCategory, searchQuery]);
+  }, [allTransactions, selectedCategory, searchQuery]);
 
   // Group by dateGroup
   const groupedTransactions = useMemo(() => {
@@ -528,11 +584,11 @@ export const ExtratoScreen: React.FC<ExtratoScreenProps> = ({
           </div>
 
           <div className="text-2xl font-black text-slate-900 tabular-nums mt-1 tracking-tight">
-            {showBalance ? 'R$ 8.713,96' : '••••••••'}
+            {showBalance ? brl(saldo) : '••••••••'}
           </div>
 
           <div className="text-[11px] text-slate-400 mt-0.5">
-            + R$ 4.500,00 de limite da conta (Cheque Especial)
+            + {brl(limiteConta)} de limite da conta (Cheque Especial)
           </div>
 
           {/* Income vs Expense Pills */}
@@ -543,7 +599,7 @@ export const ExtratoScreen: React.FC<ExtratoScreenProps> = ({
                 <span>Entradas</span>
               </div>
               <div className="text-xs font-black text-emerald-800 tabular-nums mt-0.5">
-                {showBalance ? '+ R$ 12.500,00' : '••••'}
+                {showBalance ? `+ ${brl(totals.income)}` : '••••'}
               </div>
             </div>
 
@@ -553,7 +609,7 @@ export const ExtratoScreen: React.FC<ExtratoScreenProps> = ({
                 <span>Saídas</span>
               </div>
               <div className="text-xs font-black text-slate-900 tabular-nums mt-0.5">
-                {showBalance ? '- R$ 4.837,72' : '••••'}
+                {showBalance ? `- ${brl(totals.expense)}` : '••••'}
               </div>
             </div>
           </div>
@@ -728,6 +784,24 @@ export const ExtratoScreen: React.FC<ExtratoScreenProps> = ({
                 </div>
               </div>
             </div>
+
+            {/* IA Análise (jornada do Studio): pergunta à ia.i o impacto deste gasto */}
+            {onAskIai && (
+              <div className="px-4 pt-3 bg-white shrink-0">
+                <button
+                  type="button"
+                  onClick={() => {
+                    const title = selectedTx.title;
+                    setSelectedTx(null);
+                    onAskIai(title);
+                  }}
+                  className="w-full h-10 rounded-xl bg-[#FFF4EB] border border-[#FFD8B5] text-[#EC7000] text-xs font-bold flex items-center justify-center gap-1.5 hover:bg-[#FFEBD9] transition-colors cursor-pointer"
+                >
+                  <Sparkles className="w-3.5 h-3.5 fill-[#EC7000]" />
+                  Analisar com a ia.i
+                </button>
+              </div>
+            )}
 
             {/* Bottom Action */}
             <div className="p-4 border-t border-slate-100 bg-white shrink-0 flex gap-2">

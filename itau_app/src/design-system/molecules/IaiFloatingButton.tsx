@@ -41,7 +41,7 @@ export const IaiFloatingButton: React.FC<IaiFloatingButtonProps> = ({
       <button
         onClick={handleInteraction}
         type="button"
-        aria-label="Abrir assistente Ia.i: Salário no conta, vamos programar o mês?"
+        aria-label="Abrir assistente Ia.i: Salário na conta, vamos programar o mês?"
         className={`relative flex items-center h-12 px-[13px] rounded-full bg-white border border-slate-200/90 shadow-[0_6px_22px_rgba(0,0,0,0.12)] hover:shadow-[0_8px_26px_rgba(0,71,186,0.2)] active:scale-95 transition-[box-shadow,transform] duration-300 ease-out cursor-pointer`}
       >
         {/* Orange Sparkle Icon - fixed solid without flickering/pulsing */}
@@ -57,7 +57,7 @@ export const IaiFloatingButton: React.FC<IaiFloatingButtonProps> = ({
           }`}
         >
           <span className="text-xs font-semibold text-slate-800 tracking-tight pr-1">
-            Salário no conta, vamos programar o mês?
+            Salário na conta, vamos programar o mês?
           </span>
         </div>
 

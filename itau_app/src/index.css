@@ -1,5 +1,37 @@
 @import "tailwindcss";
 
+/* Cores do design system usadas pelas telas vindas do Vertex AI Studio (bg-itau-orange, text-itau-navy...) */
+@theme {
+  --color-itau-orange: #EC7000;
+  --color-itau-orange-dark: #D45D00;
+  --color-itau-orange-light: #FFF4EB;
+  --color-itau-navy: #002244;
+  --color-itau-navy-dark: #001733;
+  --color-itau-blue: #0047BA;
+  --color-itau-blue-surface: #EEF4FC;
+  --color-itau-gray-bg: #F4F6F8;
+  --color-itau-gray-border: #E8ECEF;
+  --color-itau-gray-text: #697386;
+  --font-mono: "JetBrains Mono", ui-monospace, monospace;
+}
+
+/* Equivalente simples do tailwindcss-animate usado no Studio (animate-in fade-in slide-in-from-*) */
+@keyframes studio-enter {
+  from {
+    opacity: var(--studio-enter-opacity, 1);
+    transform: translate3d(0, var(--studio-enter-y, 0), 0);
+  }
+}
+.animate-in {
+  animation: studio-enter 0.25s ease-out both;
+}
+.fade-in {
+  --studio-enter-opacity: 0;
+}
+[class*="slide-in-from-bottom"] {
+  --studio-enter-y: 8px;
+}
+
 @layer base {
   :root {
     --itau-orange: #EC7000;

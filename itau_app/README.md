@@ -25,6 +25,22 @@ Cloud Run itau-app  (server.ts, Express; SA squad-agent-sa)
 - **Voz** (`src/features/banking/useVoiceInput.ts`): grava com MediaRecorder, converte para WAV 16 kHz e
   envia para `/api/transcribe`. Reserva: Web Speech API do navegador.
 
+### Jornadas trazidas do protótipo do Vertex AI Studio (`src/features/studio/`)
+
+- **Home** (`HubScreen`): saldo R$ 17.829,50 / limite R$ 28.000, card "R$ 10.000,00 a mais na conta!",
+  metas com progresso "alcançado vs meta", pontos Itaú Shop e "+ Nova Missão".
+- **Landing da ia.i** (`IaiLandingScreen`): termos + "Ativar e Analisar Tetos" → chat com resumo de tetos
+  por categoria; "Agora não" → chat normal.
+- **Metas e gamificação** (`MetaDetailScreen`): sugestões de investimento, aporte (debita a conta, entra no
+  extrato) e pontos Itaú Shop (1,5 ponto por real).
+- **Área Pix** (`PixModal`): Pix Copia e Cola / QR Code com alerta "vai comprometer sua renda mensal".
+- **Simulador** (`WizardScreen`): Raio-X das fixas → lazer sem culpa → teto de transporte → resumo.
+- No chat: criação de meta conversando, resumo de tetos, botões de ação e "Outras formas de Pix".
+- Extrato: "Analisar com a ia.i" no detalhe do lançamento. Cartões: cartão virtual e bloqueio temporário.
+
+Saldo, metas, pontos e lançamentos novos ficam no estado do `App.tsx` (compartilhados entre as telas, só na
+sessão). O saldo vem de `/api/pix/saldo` (`MARIA_SALDO_FONTE=bigquery` usa o último `saldo_apos` da base).
+
 ## Dados
 
 - Cliente demo "Maria" = `id_usuario 139aae21-0535-4a19-bbf2-d2b8f0c7a0d8` (saldo final R$ 1.744,32).

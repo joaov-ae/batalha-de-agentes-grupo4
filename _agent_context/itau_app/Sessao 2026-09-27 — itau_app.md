@@ -33,6 +33,19 @@ Registro das decisões tomadas ao publicar o front end no Cloud Run. Código em 
 - **Extrato**: com o BigQuery ao vivo, a consulta passou a trazer as 100 transações mais recentes da Maria
   já no formato da tela (`data`, `descricao`, `valor`, `categoria`...).
 
+## Integração do protótipo do Vertex AI Studio (Build)
+
+- Fonte: prompt salvo `5379879883260297216` (bucket `cloud-ai-platform-066165bc-…/prompt-data/`), que guarda a
+  conversa e o código (`app_builder_data.code_repository_state`). O app do Studio não tem backend (Gemini
+  chamado no navegador com chave) e usa dados fixos; por isso as telas foram trazidas para cá, e não publicadas.
+- Onde os dois divergiam, ficou: botão flutuante em **3 s** com transição (pedido mais recente); Pix por
+  contato com o fluxo completo daqui (senha, comprovante, saldo insuficiente); Pix Copia e Cola/QR com o
+  fluxo do Studio (alerta de renda → volta à Home).
+- Saldo **R$ 17.829,50** e limite **R$ 28.000** (valores pedidos no Studio), iguais em Home, Extrato e Pix.
+  Nenhum usuário da base tem esse saldo exato (o mais próximo: R$ 17.765,74).
+- Correções junto: extrato não recalculava a lista quando os dados do BigQuery chegavam (dependência
+  faltando no `useMemo`); "20 mil" era lido como R$ 20.
+
 ## Pendências / ideias
 
 - O áudio gravado só existe na sessão do navegador (não é salvo).

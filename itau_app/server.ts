@@ -40,7 +40,10 @@ Seu tom é pessoal, transparente, consultivo, acolhedor e seguro, típico do Ita
 
 DADOS DA CLIENTE (Maria - MA):
 - Perfil: Itaú Personnalité, Nível 4 no programa Minhas Vantagens.
-- Salário líquido mensal: R$ 10.000,00
+- Salário líquido mensal: R$ 10.000,00 (acabou de cair na conta)
+- Saldo em conta corrente: R$ 17.829,50; limite da conta: R$ 28.000,00
+- Metas ativas: Comprar uma casa (R$ 2.030 de R$ 700.000, até dez/2030), Comprar Carro Novo (R$ 27.000 de R$ 60.000), Chegada do Bebê (R$ 10.500 de R$ 35.000)
+- Pontos Itaú Shop: ganha pontos a cada aporte nas metas (1,5 ponto por real aportado)
 - Cartões: Personnalité Black Mastercard (final 9241).
 - Contas fixas mensais: R$ 3.620,00 (moradia R$ 2.650, água/luz R$ 340, internet R$ 180, seguros R$ 450).
 - Investimentos: Interesse em CDB 100% CDI com liquidez diária e previdência.
@@ -444,8 +447,12 @@ app.get('/api/bigquery/extrato', async (req: Request, res: Response) => {
 const PIX_PROJECT = 'batalha-time-04-z85x';
 const PIX_TABLE = '`batalha-time-04-z85x.hackathon_dados.extrato_sintetico_copy_copy`';
 const MARIA_ID_USUARIO = '139aae21-0535-4a19-bbf2-d2b8f0c7a0d8';
-const MARIA_SALDO_SNAPSHOT = 1744.32;
-const MARIA_LIMITE_CONTA = 16455;
+const MARIA_SALDO_SNAPSHOT = 1744.32; // último saldo_apos dela na base
+// Saldo e limite mostrados na Home, no Extrato e usados no Pix (valores definidos no protótipo do Studio).
+// MARIA_SALDO_FONTE=bigquery passa a usar o último saldo_apos da base.
+const MARIA_SALDO_DEMO = 17829.5;
+const MARIA_LIMITE_CONTA = 28000;
+const MARIA_SALDO_FONTE = process.env.MARIA_SALDO_FONTE || 'demo';
 
 // Snapshot de usuários da base com "pix transf" (usado quando o BigQuery não está acessível)
 const PIX_USERS_SNAPSHOT = [
@@ -621,8 +628,11 @@ app.get('/api/pix/contatos', async (req: Request, res: Response) => {
   return res.json({ nome, origem, contatos });
 });
 
-// Endpoint: saldo em conta da cliente (último saldo_apos da base)
+// Endpoint: saldo em conta da cliente (demo por padrão; ou último saldo_apos da base)
 app.get('/api/pix/saldo', async (_req: Request, res: Response) => {
+  if (MARIA_SALDO_FONTE !== 'bigquery') {
+    return res.json({ saldo: MARIA_SALDO_DEMO, limiteConta: MARIA_LIMITE_CONTA, origem: 'demo', idUsuario: MARIA_ID_USUARIO });
+  }
   try {
     const rows = await runPixQuery(
       `SELECT saldo_apos FROM ${PIX_TABLE} WHERE id_usuario = @id ORDER BY anomesdia DESC LIMIT 1`,

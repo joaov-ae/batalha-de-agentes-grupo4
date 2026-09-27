@@ -14,6 +14,9 @@ import {
   Layers,
   ChevronRight,
   ShieldCheck,
+  Lock,
+  Copy,
+  Sparkles,
 } from 'lucide-react';
 import { CreditCard, CardVariant } from '../../design-system/organisms/CreditCard';
 import { CardDetailRow } from '../../design-system/molecules/CardDetailRow';
@@ -28,6 +31,8 @@ export interface CartoesScreenProps {
   onBack?: () => void;
   onOpenControleGastos?: () => void;
   onNavigateToExtrato?: () => void;
+  /** Simulador de controle de gastos (teto de lazer/transporte) */
+  onOpenSimulador?: () => void;
   className?: string;
 }
 
@@ -35,9 +40,12 @@ export const CartoesScreen: React.FC<CartoesScreenProps> = ({
   onBack,
   onOpenControleGastos,
   onNavigateToExtrato,
+  onOpenSimulador,
   className = '',
 }) => {
   const [activeCardIndex, setActiveCardIndex] = useState(0);
+  const [isLocked, setIsLocked] = useState(false);
+  const [showVirtual, setShowVirtual] = useState(false);
   const [isPaymentOpen, setIsPaymentOpen] = useState(false);
   const [isPaid, setIsPaid] = useState(false);
   const [showFeedback, setShowFeedback] = useState(true);
@@ -249,12 +257,15 @@ export const CartoesScreen: React.FC<CartoesScreenProps> = ({
             <ServiceTile
               icon={<CreditCardIcon className="w-5 h-5 stroke-[2]" />}
               label="Cartão virtual"
-              onClick={() => showNotification('Gerar cartão virtual para compras seguras online')}
+              onClick={() => setShowVirtual((v) => !v)}
             />
             <ServiceTile
-              icon={<Settings className="w-5 h-5 stroke-[2]" />}
-              label="Gestão do cartão"
-              onClick={() => showNotification('Configurações, bloqueio temporário e senha')}
+              icon={isLocked ? <Lock className="w-5 h-5 stroke-[2]" /> : <Settings className="w-5 h-5 stroke-[2]" />}
+              label={isLocked ? 'Desbloquear' : 'Bloqueio temporário'}
+              onClick={() => {
+                setIsLocked((l) => !l);
+                showNotification(isLocked ? 'Cartão desbloqueado' : 'Cartão bloqueado temporariamente');
+              }}
             />
             <ServiceTile
               icon={<Sliders className="w-5 h-5 stroke-[2]" />}
@@ -262,7 +273,54 @@ export const CartoesScreen: React.FC<CartoesScreenProps> = ({
               onClick={() => showNotification('Ajustar limite diário e crédito')}
             />
           </div>
+
+          {/* Cartão virtual (Studio): número para compras online, com cópia */}
+          {showVirtual && (
+            <div className="mt-2.5 p-3.5 rounded-2xl bg-[#002244] text-white flex items-center justify-between gap-3 animate-in fade-in">
+              <div>
+                <span className="text-[10px] uppercase tracking-wider text-slate-300 font-semibold">Número virtual</span>
+                <p className="text-sm font-mono font-bold tracking-wider mt-0.5">5502 •••• •••• 7718</p>
+                <span className="text-[10px] text-slate-300">Validade 09/31 • Para compras online seguras</span>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  navigator.clipboard?.writeText('5502 4431 9082 7718');
+                  showNotification('Número do cartão virtual copiado');
+                }}
+                className="px-3 py-1.5 rounded-lg bg-white/15 hover:bg-white/25 text-[11px] font-bold flex items-center gap-1.5 cursor-pointer shrink-0"
+              >
+                <Copy className="w-3.5 h-3.5" /> Copiar
+              </button>
+            </div>
+          )}
+
+          {isLocked && (
+            <div className="mt-2.5 p-3 rounded-2xl bg-red-50 border border-red-200 flex items-center gap-2 text-[11px] text-red-700 font-semibold" role="status">
+              <Lock className="w-3.5 h-3.5" />
+              Cartão bloqueado temporariamente. Compras novas serão recusadas até o desbloqueio.
+            </div>
+          )}
         </div>
+
+        {/* Assistente de limites (Studio): definir teto de gastos no cartão */}
+        {onOpenSimulador && (
+          <div
+            onClick={onOpenSimulador}
+            className="bg-white p-3.5 rounded-2xl border border-slate-200 flex items-center justify-between cursor-pointer hover:border-[#EC7000] transition-all"
+          >
+            <div className="flex items-center gap-3">
+              <div className="w-9 h-9 rounded-xl bg-[#FFF4EB] text-[#EC7000] flex items-center justify-center">
+                <Sparkles className="w-4 h-4" />
+              </div>
+              <div>
+                <span className="text-xs font-bold text-slate-900 block">Definir teto de gastos no cartão</span>
+                <span className="text-[11px] text-slate-500">Evite surpresas no fim do mês programando o lazer</span>
+              </div>
+            </div>
+            <span className="text-[11px] font-bold text-[#EC7000]">Configurar</span>
+          </div>
+        )}
 
         {/* Controle de Gastos Teaser */}
         {onOpenControleGastos && (

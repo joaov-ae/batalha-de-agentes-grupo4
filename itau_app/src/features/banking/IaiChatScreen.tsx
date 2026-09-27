@@ -16,9 +16,13 @@ import {
   Loader2,
   Play,
   Pause,
+  FileCode2,
+  QrCode,
+  SlidersHorizontal,
+  Target,
+  House,
 } from 'lucide-react';
 import { useVoiceInput, VoicePixIntent } from './useVoiceInput';
-import { FinancialGoal } from './goalsStore';
 import {
   PixFlow,
   PixContato,
@@ -29,15 +33,33 @@ import {
   formatPixDate,
   downloadComprovante,
 } from './PixFlow';
+import { FinancialGoal, ScreenType, CategoryCap } from '../studio/studioTypes';
+import { DEFAULT_INVESTMENT_OPTIONS } from '../studio/studioConstants';
 import confetti from 'canvas-confetti';
 
 export interface IaiChatScreenProps {
   onBack: () => void;
+  /** Navegação para outras telas (simulador de gastos, tela inicial...) */
+  onNavigate?: (screen: ScreenType) => void;
   onGoalCreated?: (goal: FinancialGoal) => void;
-  activeGoals?: FinancialGoal[];
+  /** Abre a Área Pix nas abas Copia e Cola ou QR Code */
+  onStartPixArea?: (mode: 'copia_cola' | 'qr_code') => void;
+  /** Saldos compartilhados com a Home e o Extrato */
+  saldos: PixSaldos;
+  /** Pix concluído: o App desconta o valor do saldo */
+  onPixDone?: (comprovante: PixComprovante) => void;
+  /** Pergunta enviada automaticamente ao abrir (landing, extrato) */
+  initialPrompt?: string;
+  /** Abre direto na jornada "+ Nova Missão" */
+  isGoalCreationFlow?: boolean;
   className?: string;
   skipIntro?: boolean;
 }
+
+type QuickAction =
+  | { type: 'view_wizard'; label: string }
+  | { type: 'view_home'; label: string }
+  | { type: 'create_goal'; label: string; goal: { title: string; target: number; deadline: string } };
 
 interface ChatMessage {
   id: string;
@@ -58,11 +80,34 @@ interface ChatMessage {
     contato: PixContato;
   };
   pixReceipt?: PixComprovante;
+  /** Resumo de tetos por categoria (jornada de controle de gastos) */
+  categoryCaps?: CategoryCap[];
+  /** Botão de ação abaixo da resposta */
+  quickAction?: QuickAction;
+  /** Respostas sugeridas (jornada de criação de meta) */
+  chips?: string[];
 }
 
-// Saldos iniciais dos cartões (limites fictícios); o saldo em conta vem da base via /api/pix/saldo
-const CARD_LIMITS = { infinite: 24572.2, black: 13220.98 };
-const FALLBACK_SALDOS: PixSaldos = { conta: 1744.32, limiteConta: 16455, ...CARD_LIMITS };
+// Tetos sugeridos para o salário de R$ 10.000 (jornada de controle de gastos por categoria, do Studio)
+const SUGGESTED_CATEGORY_CAPS: CategoryCap[] = [
+  { category: 'Essenciais Fixos', amount: 3620, percentage: 36.2, description: 'Moradia, água, luz, internet e seguros', color: '#002244' },
+  { category: 'Lazer Sem Culpa', amount: 3100, percentage: 31.0, description: 'Restaurantes, cultura e passeios', color: '#EC7000' },
+  { category: 'Transporte & Apps', amount: 600, percentage: 6.0, description: 'Uber, 99 e combustível com alerta de 85%', color: '#0047BA' },
+  { category: 'Investimento Futuro', amount: 2000, percentage: 20.0, description: 'CDB Personnalité 100% CDI Liquidez Diária', color: '#059669' },
+];
+
+// Jornada "+ Nova Missão": respostas sugeridas em cada passo
+const GOAL_FLOW_CHIPS: Record<1 | 2 | 3, string[]> = {
+  1: ['Comprar uma casa', 'Viagem internacional', 'Reserva de emergência', 'Trocar de carro'],
+  2: ['R$ 50.000', 'R$ 150.000', 'R$ 700.000'],
+  3: ['12 meses', 'dezembro 2028', 'dezembro 2030'],
+};
+
+const isCategoryCapsRequest = (text: string) => {
+  const t = text.normalize('NFD').replace(/\p{M}/gu, '').toLowerCase();
+  if (t.includes('transporte')) return false;
+  return /categoria|divisao|essenciais|controle de gastos|tetos? (maximo|de gastos)|teto por/.test(t);
+};
 
 // Extrai valor e nome de frases como "Envia um Pix de R$10 para Jessica por favor"
 const parsePixRequest = (text: string): { amount: number | null; nome: string | null } => {
@@ -77,6 +122,9 @@ const parsePixRequest = (text: string): { amount: number | null; nome: string | 
   } else if (integer) {
     amount = parseFloat(integer[1]);
   }
+  // "20 mil", "1,5 mil", "2 mil reais"
+  const mil = text.match(/(\d+(?:[.,]\d+)?)\s*mil\b/i);
+  if (mil) amount = parseFloat(mil[1].replace(',', '.')) * 1000;
   if (amount !== null && !(amount > 0)) amount = null;
 
   const nomeMatch = text.match(/(?:^|\s)(?:para|pra|pro)\s+(?:(?:a|o|minha|meu)\s+)?(\p{L}{2,})/iu);
@@ -173,12 +221,19 @@ const AudioBubble: React.FC<{ url: string; duration: number }> = ({ url, duratio
 
 export const IaiChatScreen: React.FC<IaiChatScreenProps> = ({
   onBack,
+  onNavigate,
+  onGoalCreated,
+  onStartPixArea,
+  saldos,
+  onPixDone,
+  initialPrompt,
+  isGoalCreationFlow = false,
   className = '',
   skipIntro = false,
 }) => {
   // Opening preparation stages: 'preparing' -> 'ready' -> 'chat'
   const [openingPhase, setOpeningPhase] = useState<'preparing' | 'ready' | 'chat'>(
-    skipIntro ? 'chat' : 'preparing'
+    skipIntro || isGoalCreationFlow ? 'chat' : 'preparing'
   );
 
   // Stepped conversational loading progress for IA.i response:
@@ -198,24 +253,17 @@ export const IaiChatScreen: React.FC<IaiChatScreenProps> = ({
 
   // Fluxo Pix em tela cheia (telas de forma de pagamento → revisão → senha → sucesso)
   const [pixFlow, setPixFlow] = useState<{ amount: number; contato: PixContato } | null>(null);
-  const [saldos, setSaldos] = useState<PixSaldos | null>(null);
+
+  // Jornada "+ Nova Missão": 0 = fora da jornada, 1 = nome, 2 = valor, 3 = prazo
+  const [goalFlowStep, setGoalFlowStep] = useState<0 | 1 | 2 | 3>(0);
+  const goalDraftRef = useRef<{ title: string; target: number }>({ title: '', target: 0 });
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+  const initialPromptSentRef = useRef(false);
 
-  const loadSaldos = async (): Promise<PixSaldos> => {
-    if (saldos) return saldos;
-    try {
-      const res = await fetch('/api/pix/saldo');
-      const data = await res.json();
-      const loaded = { conta: Number(data.saldo), limiteConta: Number(data.limiteConta), ...CARD_LIMITS };
-      setSaldos(loaded);
-      return loaded;
-    } catch {
-      setSaldos(FALLBACK_SALDOS);
-      return FALLBACK_SALDOS;
-    }
-  };
+  // Saldos vêm do App (os mesmos da Home e do Extrato)
+  const loadSaldos = async (): Promise<PixSaldos> => saldos;
 
   const notify = (msg: string) => {
     setToastMessage(msg);
@@ -267,9 +315,32 @@ export const IaiChatScreen: React.FC<IaiChatScreenProps> = ({
     scrollToBottom();
   }, [messages, isLoading, loadingStep, openingPhase]);
 
+  // Jornada "+ Nova Missão": abre direto na pergunta do nome da meta
+  useEffect(() => {
+    if (!isGoalCreationFlow) return;
+    setGoalFlowStep(1);
+    setMessages([
+      {
+        id: 'goal-step-1',
+        sender: 'iai',
+        text: 'Vamos criar sua meta! Qual o nome dela? Aqui vão alguns exemplos, se quiser usar um:',
+        timestamp: nowTime(),
+        chips: GOAL_FLOW_CHIPS[1],
+      },
+    ]);
+  }, [isGoalCreationFlow]);
+
+  // Pergunta inicial (vinda da landing ou do extrato) enviada assim que o chat abre
+  useEffect(() => {
+    if (openingPhase !== 'chat' || !initialPrompt || initialPromptSentRef.current) return;
+    initialPromptSentRef.current = true;
+    handleSendMessage(initialPrompt);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [openingPhase, initialPrompt]);
+
   // Initial Opening Animation Transition matching Video 2 (00:08 - 00:11)
   useEffect(() => {
-    if (skipIntro) return;
+    if (skipIntro || isGoalCreationFlow) return;
 
     // Phase 1 -> Phase 2 ("Preparando tudo por aqui..." -> "Pronto, vamos conversar!")
     const timer1 = setTimeout(() => {
@@ -362,6 +433,11 @@ export const IaiChatScreen: React.FC<IaiChatScreenProps> = ({
     const text = (textToSend || inputValue).trim();
     // Mensagem de voz já está em "loading" (ouvindo o áudio), por isso não é bloqueada aqui
     if (!text || (isLoading && !opts?.audioMsgId)) return;
+
+    if (goalFlowStep > 0) {
+      handleGoalFlowStep(text, opts?.audioMsgId);
+      return;
+    }
 
     const currentTime = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 
@@ -468,6 +544,28 @@ export const IaiChatScreen: React.FC<IaiChatScreenProps> = ({
       // Allow user to see conversational loading steps sequentially
       await new Promise((resolve) => setTimeout(resolve, 3800));
 
+      // Jornada do Studio: controle de gastos por categoria, com tetos em dinheiro e porcentagem
+      if (isCategoryCapsRequest(text)) {
+        setMessages((prev) => [
+          ...prev,
+          {
+            id: `iai-${Date.now()}`,
+            sender: 'iai',
+            text:
+              `Maria, analisei seu extrato recente e sua renda líquida mensal de **R$ 10.000,00**.\n\n` +
+              `Sugiro um **controle de gastos por categoria** com tetos máximos (em dinheiro e percentual) para equilibrar suas despesas com tranquilidade:\n\n` +
+              `• **Essenciais Fixos:** R$ 3.620,00 (**36,2%**), bem abaixo da média de 50%.\n` +
+              `• **Lazer Sem Culpa:** até R$ 3.100,00 (**31,0%**) para restaurantes, viagens e passeios.\n` +
+              `• **Transporte & Mobilidade:** até R$ 600,00 (**6,0%**), com aviso ao atingir 85% do teto.\n` +
+              `• **Investimento no Futuro:** R$ 2.000,00 (**20,0%**) no CDB 100% CDI com liquidez diária.\n\n` +
+              `Você pode parametrizar e ajustar cada um desses valores:`,
+            timestamp: nowTime(),
+            categoryCaps: SUGGESTED_CATEGORY_CAPS,
+          },
+        ]);
+        return;
+      }
+
       // Prompt 1: Faça o Raio-X das minhas contas fixas.
       if (lowerText.includes('raio-x') || lowerText.includes('raio x') || lowerText.includes('contas fixas')) {
         const iaiMsg: ChatMessage = {
@@ -483,6 +581,7 @@ export const IaiChatScreen: React.FC<IaiChatScreenProps> = ({
 
 💡 **Diagnóstico Ia.i:** Excelente! Suas despesas fixas estão bem abaixo do limite recomendado de 50%. Todas estão cadastradas no débito automático do Itaú, garantindo pontualidade e pontos no Minhas Vantagens!`,
           timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+          quickAction: { type: 'view_wizard', label: 'Personalizar orçamento no simulador' },
         };
 
         setMessages((prev) => [...prev, iaiMsg]);
@@ -490,7 +589,8 @@ export const IaiChatScreen: React.FC<IaiChatScreenProps> = ({
       }
 
       // Prompt 2: Quanto posso gastar com lazer sem culpa?
-      if (lowerText.includes('lazer') || lowerText.includes('sem culpa')) {
+      // (perguntas de impacto vindas do extrato seguem para o Gemini)
+      if ((lowerText.includes('lazer') || lowerText.includes('sem culpa')) && !lowerText.includes('impacto')) {
         const iaiMsg: ChatMessage = {
           id: `iai-${Date.now()}`,
           sender: 'iai',
@@ -501,6 +601,11 @@ export const IaiChatScreen: React.FC<IaiChatScreenProps> = ({
 
 🔒 **Dica inteligente:** Ativei um aviso no seu Personnalité Black para te notificar quando você atingir 80% dessa meta. Assim você aproveita o mês com liberdade e zero culpa!`,
           timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+          quickAction: {
+            type: 'create_goal',
+            label: 'Salvar como meta: Lazer sem culpa',
+            goal: { title: 'Lazer sem culpa', target: 2000, deadline: 'este mês' },
+          },
         };
 
         setMessages((prev) => [...prev, iaiMsg]);
@@ -538,6 +643,11 @@ Deseja que eu programe o investimento automático de R$ 2.000,00 no dia que o se
 
 Criei um controle inteligente de categoria ativo no app. Você receberá avisos em tempo real a cada abastecimento ou corrida no seu cartão Itaú!`,
           timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+          quickAction: {
+            type: 'create_goal',
+            label: 'Salvar teto de transporte como meta',
+            goal: { title: 'Teto de transporte', target: 750, deadline: 'este mês' },
+          },
         };
 
         setMessages((prev) => [...prev, iaiMsg]);
@@ -603,6 +713,82 @@ Se quiser saber mais sobre algum desses pontos ou programar seu mês, é só me 
     }
   };
 
+  const buildGoal = (title: string, target: number, deadline: string, currentAmount = 0): FinancialGoal => {
+    const lower = title.toLowerCase();
+    return {
+      id: `goal-${Date.now()}`,
+      title,
+      category: lower.includes('casa') ? 'moradia' : lower.includes('carro') || lower.includes('transporte') ? 'transporte' : 'geral',
+      targetAmount: target,
+      currentAmount,
+      color: '#EC7000',
+      iconName: lower.includes('casa') ? 'Home' : lower.includes('carro') ? 'Car' : 'Sparkles',
+      deadline,
+      itauShopPointsBonus: 500,
+      suggestedInvestments: DEFAULT_INVESTMENT_OPTIONS,
+      level: 1,
+    };
+  };
+
+  // Jornada "+ Nova Missão": nome → valor → prazo → meta criada na tela inicial (+500 pts Itaú Shop)
+  const handleGoalFlowStep = (text: string, audioMsgId?: string) => {
+    const userMsg: ChatMessage = { id: `user-${Date.now()}`, sender: 'user', text, timestamp: nowTime() };
+    const iai = (msgText: string, extra: Partial<ChatMessage> = {}): ChatMessage => ({
+      id: `iai-${Date.now() + 1}`,
+      sender: 'iai',
+      text: msgText,
+      timestamp: nowTime(),
+      ...extra,
+    });
+    const addMessages = (reply: ChatMessage) => {
+      setMessages((prev) => [
+        ...(audioMsgId ? prev.map((m) => (m.id === audioMsgId ? { ...m, text } : m)) : [...prev, userMsg]),
+        reply,
+      ]);
+      setInputValue('');
+      if (audioMsgId) setIsLoading(false);
+    };
+
+    if (goalFlowStep === 1) {
+      const title = text.charAt(0).toUpperCase() + text.slice(1);
+      goalDraftRef.current = { title, target: 0 };
+      addMessages(iai(`Boa escolha! Qual o valor estimado para "${title}"?`, { chips: GOAL_FLOW_CHIPS[2] }));
+      setGoalFlowStep(2);
+    } else if (goalFlowStep === 2) {
+      const { amount } = parsePixRequest(text);
+      if (!amount) {
+        addMessages(iai('Não entendi o valor. Pode me dizer quanto você precisa juntar? Por exemplo: R$ 50.000.', { chips: GOAL_FLOW_CHIPS[2] }));
+        return;
+      }
+      goalDraftRef.current.target = amount;
+      addMessages(iai('E quando você pretende concluir essa meta?', { chips: GOAL_FLOW_CHIPS[3] }));
+      setGoalFlowStep(3);
+    } else if (goalFlowStep === 3) {
+      const { title, target } = goalDraftRef.current;
+      const goal = buildGoal(title, target, text);
+      onGoalCreated?.(goal);
+      addMessages(
+        iai(
+          `Meta criada! **"${title}"**: ${formatBRL(target)} até ${text}. Já adicionei na sua tela inicial com **+500 pontos no Itaú Shop**! 🎯\n\nA cada aporte você ganha mais pontos para trocar na loja.`,
+          { quickAction: { type: 'view_home', label: 'Ver na tela inicial' } },
+        ),
+      );
+      setGoalFlowStep(0);
+      confetti({ particleCount: 70, spread: 70, origin: { y: 0.6 }, colors: ['#EC7000', '#002244', '#FFC107'] });
+    }
+  };
+
+  const handleQuickAction = (action: QuickAction, msgId: string) => {
+    if (action.type === 'view_wizard') onNavigate?.('wizard');
+    else if (action.type === 'view_home') onNavigate?.('hub');
+    else if (action.type === 'create_goal') {
+      onGoalCreated?.(buildGoal(action.goal.title, action.goal.target, action.goal.deadline));
+      // Evita salvar a mesma meta duas vezes
+      setMessages((prev) => prev.map((m) => (m.id === msgId ? { ...m, quickAction: undefined } : m)));
+      notify(`Meta "${action.goal.title}" adicionada à tela inicial (+500 pts)`);
+    }
+  };
+
   // Tela 1 → 2: usuário escolhe o destinatário; a Ia.i mostra o card de revisão no chat
   const handleSelectContato = (contato: PixContato, amount: number) => {
     setMessages((prev) => [
@@ -640,11 +826,7 @@ Se quiser saber mais sobre algum desses pontos ou programar seu mês, é só me 
   // Tela 6 → chat: volta para a conversa com o comprovante
   const handlePixDone = (comprovante: PixComprovante, action: 'voltar' | 'nova') => {
     setPixFlow(null);
-    setSaldos((prev) => {
-      const base = prev || FALLBACK_SALDOS;
-      const key = comprovante.fonte.id;
-      return { ...base, [key]: base[key] - comprovante.amount };
-    });
+    onPixDone?.(comprovante);
 
     confetti({
       particleCount: 80,
@@ -745,7 +927,7 @@ Se quiser saber mais sobre algum desses pontos ou programar seu mês, é só me 
         <PixFlow
           amount={pixFlow.amount}
           contato={pixFlow.contato}
-          saldos={saldos || FALLBACK_SALDOS}
+          saldos={saldos}
           onClose={() => setPixFlow(null)}
           onDone={handlePixDone}
         />
@@ -779,7 +961,8 @@ Se quiser saber mais sobre algum desses pontos ou programar seu mês, é só me 
 
       {/* Messages Scroll Area */}
       <div className="flex-1 min-h-0 overflow-y-auto px-4 py-4 space-y-5">
-        {/* Initial Assistant Welcoming Message & Suggestion Cards (Video 2 00:12) */}
+        {/* Initial Assistant Welcoming Message & Suggestion Cards (Video 2 00:12) — oculto na jornada "+ Nova Missão" */}
+        {!isGoalCreationFlow && (
         <div className="flex items-start gap-2.5">
           <div className="w-6 h-6 flex items-center justify-center shrink-0 mt-0.5">
             <Sparkles className="w-4 h-4 text-[#EC7000] fill-[#EC7000]" />
@@ -834,6 +1017,7 @@ Se quiser saber mais sobre algum desses pontos ou programar seu mês, é só me 
             </div>
           </div>
         </div>
+        )}
 
         {/* Dynamic Chat Messages */}
         {messages.map((msg) => (
@@ -912,6 +1096,108 @@ Se quiser saber mais sobre algum desses pontos ou programar seu mês, é só me 
                         <ChevronRight className="w-4 h-4 text-slate-400 shrink-0" />
                       </button>
                     </div>
+                  )}
+
+                  {/* Outras formas de Pix (jornada do Studio): Copia e Cola ou QR Code na Área Pix */}
+                  {msg.pixSelection && onStartPixArea && (
+                    <div className="space-y-2">
+                      <span className="text-[11px] font-semibold text-slate-500 block">Outras formas de Pix:</span>
+                      <div className="grid grid-cols-2 gap-2">
+                        {([
+                          { mode: 'copia_cola', icon: FileCode2, title: 'Copia e Cola', sub: 'Cole o código' },
+                          { mode: 'qr_code', icon: QrCode, title: 'QR Code', sub: 'Escanear' },
+                        ] as const).map((o) => (
+                          <button
+                            key={o.mode}
+                            type="button"
+                            onClick={() => onStartPixArea(o.mode)}
+                            className="p-3 bg-white border border-slate-200/80 hover:border-[#EC7000] rounded-xl text-left transition-all shadow-2xs flex items-center gap-2.5 cursor-pointer"
+                          >
+                            <div className="w-8 h-8 rounded-lg bg-orange-50 text-[#EC7000] flex items-center justify-center shrink-0">
+                              <o.icon className="w-4 h-4" />
+                            </div>
+                            <div>
+                              <span className="text-xs font-bold text-slate-900 block leading-tight">{o.title}</span>
+                              <span className="text-[9px] text-slate-500">{o.sub}</span>
+                            </div>
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Resumo dos tetos por categoria + parametrização no simulador */}
+                  {msg.categoryCaps && (
+                    <div className="bg-[#FAFBFD] border border-slate-200/80 rounded-2xl p-3.5 space-y-2.5 shadow-2xs">
+                      <div className="flex justify-between items-center border-b border-slate-100 pb-2">
+                        <span className="text-xs font-bold text-[#002244] flex items-center gap-1.5">
+                          <SlidersHorizontal className="w-3.5 h-3.5 text-[#EC7000]" />
+                          Resumo dos Tetos Propostos
+                        </span>
+                        <span className="text-[10px] text-slate-500 font-mono">Salário R$ 10.000,00</span>
+                      </div>
+                      <div className="space-y-2">
+                        {msg.categoryCaps.map((c) => (
+                          <div key={c.category} className="flex justify-between items-center text-xs gap-2">
+                            <div className="flex items-start gap-2 min-w-0">
+                              <span className="w-2 h-2 rounded-full mt-1 shrink-0" style={{ backgroundColor: c.color }} />
+                              <div className="min-w-0">
+                                <span className="font-bold text-slate-800 block">{c.category}</span>
+                                <span className="text-[10px] text-slate-400">{c.description}</span>
+                              </div>
+                            </div>
+                            <div className="text-right shrink-0">
+                              <span className="font-bold font-mono text-slate-900 block">{formatBRL(c.amount)}</span>
+                              <span className="text-[10px] font-semibold text-[#EC7000] font-mono">{c.percentage.toFixed(1)}%</span>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                      {onNavigate && (
+                        <button
+                          type="button"
+                          onClick={() => onNavigate('wizard')}
+                          className="w-full py-2.5 bg-[#EC7000] hover:bg-[#D45D00] text-white rounded-xl font-bold text-xs flex items-center justify-center gap-1.5 shadow-sm transition-all active:scale-[0.98] cursor-pointer"
+                        >
+                          Parametrizar e Ajustar Valores
+                          <ChevronRight className="w-4 h-4" />
+                        </button>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Respostas sugeridas (jornada de criação de meta) */}
+                  {msg.chips && msg.id === messages[messages.length - 1]?.id && (
+                    <div className="flex flex-wrap gap-2">
+                      {msg.chips.map((chip) => (
+                        <button
+                          key={chip}
+                          type="button"
+                          onClick={() => handleSendMessage(chip)}
+                          className="px-3 py-1.5 rounded-full bg-white border border-[#FFD8B5] text-[11px] font-semibold text-[#EC7000] hover:bg-[#FFF4EB] transition-colors cursor-pointer"
+                        >
+                          {chip}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+
+                  {/* Botão de ação da resposta */}
+                  {msg.quickAction && (
+                    <button
+                      type="button"
+                      onClick={() => handleQuickAction(msg.quickAction!, msg.id)}
+                      className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-[#FFF4EB] border border-[#FFD8B5] text-[11px] font-bold text-[#EC7000] hover:bg-[#FFEBD9] transition-colors cursor-pointer"
+                    >
+                      {msg.quickAction.type === 'create_goal' ? (
+                        <Target className="w-3.5 h-3.5" />
+                      ) : msg.quickAction.type === 'view_home' ? (
+                        <House className="w-3.5 h-3.5" />
+                      ) : (
+                        <SlidersHorizontal className="w-3.5 h-3.5" />
+                      )}
+                      {msg.quickAction.label}
+                    </button>
                   )}
 
                   {/* Tela 2: card de revisão do Pix dentro da conversa */}
