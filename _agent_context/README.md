@@ -10,6 +10,7 @@ Os arquivos são organizados em subpastas correspondentes a cada serviço ou fre
 * **`guardrails/`**: Documentações, testes de latência e anotações do serviço de Guardrails (`guardrails`).
 * **`itau_app/`**: Decisões e anotações de sessão do front end da demo (`itau_app`, Cloud Run `itau-app`).
 * **`pitch_analytics/`**: Storytelling de dados em 6 atos, gráficos executivos e exportações para o pitch (`pitch_analytics`).
+* **`observabilidade/`**: Base simulada (BigQuery `observabilidade`), métricas de longo prazo e ingestão de eventos do agente (`observabilidade`, Cloud Run `observabilidade-itau`).
 * *(Novas pastas de outros serviços devem ser adicionadas aqui conforme forem criados).*
 
 ## Como Usar com o Agente
