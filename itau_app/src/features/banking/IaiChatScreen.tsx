@@ -633,132 +633,40 @@ export const IaiChatScreen: React.FC<IaiChatScreenProps> = ({
         return;
       }
 
-      // Allow user to see conversational loading steps sequentially
-      await new Promise((resolve) => setTimeout(resolve, 3800));
-
-      // Respostas prontas montadas com os números reais da cliente (perfil de /api/cliente)
       const R = cliente;
       const tetoDe = (prefixo: string) => R.tetos.find((t) => t.categoria.startsWith(prefixo));
       const tetoEstilo = tetoDe('Lazer');
       const tetoTransp = tetoDe('Transporte');
-      const tetoReserva = tetoDe('Reserva');
-      const pctTxt = (v: number) => `${v.toFixed(1).replace('.', ',')}%`;
 
-      // Jornada do Studio: controle de gastos por categoria, com tetos em dinheiro e porcentagem
+      // Determina decorações visuais interativas (cards, botões de ação) para anexar à resposta oficial da IA
+      const extraProps: Partial<ChatMessage> = {};
       if (isCategoryCapsRequest(text)) {
-        setMessages((prev) => [
-          ...prev,
-          {
-            id: `iai-${Date.now()}`,
-            sender: 'iai',
-            text:
-              `${R.primeiroNome}, analisei seu extrato recente e sua renda mensal de **${formatBRL(R.renda.mensal)}**.\n\n` +
-              `Sugiro um **controle de gastos por categoria** com tetos máximos (em dinheiro e percentual), para sobrar uma margem para imprevistos:\n\n` +
-              R.tetos.map((t) => `• **${t.categoria}:** ${formatBRL(t.valor)} (**${pctTxt(t.percentual)}**). ${t.descricao}.`).join('\n') +
-              `\n\nVocê pode parametrizar e ajustar cada um desses valores:`,
-            timestamp: nowTime(),
-            categoryCaps: R.tetos.map((t) => ({
-              category: t.categoria,
-              amount: t.valor,
-              percentage: t.percentual,
-              description: t.descricao,
-              color: t.cor,
-            })),
-          },
-        ]);
-        return;
-      }
-
-      // Prompt 1: Faça o Raio-X das minhas contas fixas.
-      if (lowerText.includes('raio-x') || lowerText.includes('raio x') || lowerText.includes('contas fixas')) {
-        const diagnostico =
-          R.fixas.percentualRenda > 50
-            ? `💡 **Diagnóstico Ia.i:** suas despesas fixas usam **${pctTxt(R.fixas.percentualRenda)}** da renda, acima dos 50% recomendados. Sobram **${formatBRL(R.sobraAposFixas)}** para o resto do mês: a renda cobre as despesas, mas sem margem para imprevistos. Vale separar uma reserva logo no dia do salário.`
-            : `💡 **Diagnóstico Ia.i:** suas despesas fixas usam **${pctTxt(R.fixas.percentualRenda)}** da renda, dentro dos 50% recomendados. Sobram **${formatBRL(R.sobraAposFixas)}** para o resto do mês.`;
-        const iaiMsg: ChatMessage = {
-          id: `iai-${Date.now()}`,
-          sender: 'iai',
-          text:
-            `Com certeza, ${R.primeiroNome}! Preparei o Raio-X das suas contas fixas deste mês:\n\n` +
-            R.fixas.grupos.map((g) => `• **${g.nome}:** ${formatBRL(g.valor)} (${pctTxt(g.percentual)})`).join('\n') +
-            `\n• **TOTAL DE CONTAS FIXAS:** ${formatBRL(R.fixas.total)} (${pctTxt(R.fixas.percentualRenda)} da sua renda)\n\n` +
-            diagnostico,
-          timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-          quickAction: { type: 'view_wizard', label: 'Personalizar orçamento no simulador' },
-        };
-
-        setMessages((prev) => [...prev, iaiMsg]);
-        return;
-      }
-
-      // Prompt 2: Quanto posso gastar com lazer sem culpa?
-      // (perguntas de impacto vindas do extrato seguem para o Gemini)
-      if ((lowerText.includes('lazer') || lowerText.includes('sem culpa')) && !lowerText.includes('impacto')) {
+        extraProps.categoryCaps = R.tetos.map((t) => ({
+          category: t.categoria,
+          amount: t.valor,
+          percentage: t.percentual,
+          description: t.descricao,
+          color: t.cor,
+        }));
+      } else if (lowerText.includes('raio-x') || lowerText.includes('raio x') || lowerText.includes('contas fixas') || isProfileQuery) {
+        extraProps.quickAction = { type: 'view_wizard', label: 'Personalizar orçamento no simulador' };
+      } else if ((lowerText.includes('lazer') || lowerText.includes('sem culpa')) && !lowerText.includes('impacto')) {
         const teto = tetoEstilo?.valor ?? 0;
-        const iaiMsg: ChatMessage = {
-          id: `iai-${Date.now()}`,
-          sender: 'iai',
-          text:
-            `${R.primeiroNome}, com o salário na conta e as contas fixas cobertas, calculei sua margem de tranquilidade:\n\n` +
-            `• **Teto para lazer, delivery e compras:** **${formatBRL(teto)} no mês** (${pctTxt(tetoEstilo?.percentual ?? 0)} da renda).\n` +
-            `• **Por semana:** cerca de ${formatBRL(teto / 4.3)}.\n` +
-            `• **Hoje você gasta em média ${formatBRL(R.estiloDeVidaMedio)}/mês** nessas categorias.\n\n` +
-            `🔒 **Dica inteligente:** esse teto já deixa ${formatBRL(tetoReserva?.valor ?? 0)} livres para imprevistos. Posso te avisar quando você chegar a 80% dele.`,
-          timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-          quickAction: {
-            type: 'create_goal',
-            label: 'Salvar como meta: Lazer sem culpa',
-            goal: { title: 'Lazer sem culpa', target: teto, deadline: 'este mês' },
-          },
+        extraProps.quickAction = {
+          type: 'create_goal',
+          label: 'Salvar como meta: Lazer sem culpa',
+          goal: { title: 'Lazer sem culpa', target: teto, deadline: 'este mês' },
         };
-
-        setMessages((prev) => [...prev, iaiMsg]);
-        return;
-      }
-
-      // Prompt 4: Definir meu teto de gastos de transporte do mês.
-      if (lowerText.includes('transporte') || lowerText.includes('teto')) {
+      } else if (lowerText.includes('transporte') || lowerText.includes('teto')) {
         const teto = tetoTransp?.valor ?? 0;
-        const iaiMsg: ChatMessage = {
-          id: `iai-${Date.now()}`,
-          sender: 'iai',
-          text:
-            `Ótimo planejamento, ${R.primeiroNome}! Analisei seus gastos com mobilidade dos últimos 3 meses:\n\n` +
-            `• **Média histórica:** ${formatBRL(R.transporteMedio)}/mês (combustível e apps de transporte).\n` +
-            `• **Teto sugerido para este mês:** **${formatBRL(teto)}**.\n\n` +
-            `Com o controle ativo, você recebe um aviso ao chegar a 85% do teto.`,
-          timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-          quickAction: {
-            type: 'create_goal',
-            label: 'Salvar teto de transporte como meta',
-            goal: { title: 'Teto de transporte', target: teto, deadline: 'este mês' },
-          },
+        extraProps.quickAction = {
+          type: 'create_goal',
+          label: 'Salvar teto de transporte como meta',
+          goal: { title: 'Teto de transporte', target: teto, deadline: 'este mês' },
         };
-
-        setMessages((prev) => [...prev, iaiMsg]);
-        return;
       }
 
-      if (isProfileQuery) {
-        const iaiMsg: ChatMessage = {
-          id: `iai-${Date.now()}`,
-          sender: 'iai',
-          text:
-            `${R.primeiroNome}, olhando o seu extrato dos últimos ${R.historico.meses} meses:\n\n` +
-            `• **Renda recorrente:** ${formatBRL(R.renda.mensal)} por mês (salário de ${formatBRL(R.renda.salario)} + ${formatBRL(R.renda.outras)} de outras entradas).\n\n` +
-            `• **Despesas fixas:** ${formatBRL(R.fixas.total)} (${pctTxt(R.fixas.percentualRenda)} da renda). A maior é ${R.fixas.grupos[0]?.nome.toLowerCase() ?? 'moradia'} (${formatBRL(R.fixas.grupos[0]?.valor ?? 0)}).\n\n` +
-            `• **Folga:** sobram ${formatBRL(R.sobraAposFixas)} (${pctTxt(R.sobraAposFixasPct)}) depois das fixas, e você gasta em média ${formatBRL(R.estiloDeVidaMedio)}/mês com lazer, delivery e compras.\n\n` +
-            `• **Histórico:** a conta ficou no negativo em ${R.historico.mesesNoNegativo} desses meses (${R.historico.quais.join(', ')}). A renda cobre as despesas médias, mas um gasto fora do planejado já é suficiente para negativar.\n\n` +
-            `Quer que eu monte um plano para proteger essa folga?`,
-          timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-          quickAction: { type: 'view_wizard', label: 'Montar plano no simulador' },
-        };
-
-        setMessages((prev) => [...prev, iaiMsg]);
-        return;
-      }
-
-      // Fallback or API request
+      // Toda análise e resposta textual é gerada oficialmente pelo backend (Financial Agent / Gemini + Guardrails)
       const response = await fetch('/api/gemini/chat', {
         method: 'POST',
         headers: {
@@ -822,18 +730,17 @@ export const IaiChatScreen: React.FC<IaiChatScreenProps> = ({
           }
         }
 
-        if (!accumulatedText.trim()) {
-          setMessages((prev) =>
-            prev.map((m) =>
-              m.id === msgId
-                ? {
-                    ...m,
-                    text: `Entendi, ${cliente.primeiroNome}. Posso te ajudar com detalhes sobre seus cartões Personnalité, CDB ou planejamento de gastos.`,
-                  }
-                : m
-            )
-          );
-        }
+        setMessages((prev) =>
+          prev.map((m) =>
+            m.id === msgId
+              ? {
+                  ...m,
+                  text: accumulatedText.trim() || `Entendi, ${cliente.primeiroNome}. Posso te ajudar com detalhes sobre seus cartões Personnalité, CDB ou planejamento de gastos.`,
+                  ...extraProps,
+                }
+              : m
+          )
+        );
       } else {
         const data = await response.json();
 
@@ -842,6 +749,7 @@ export const IaiChatScreen: React.FC<IaiChatScreenProps> = ({
           sender: 'iai',
           text: data.text || `Entendi, ${cliente.primeiroNome}. Posso te ajudar com detalhes sobre seus cartões Personnalité, CDB ou planejamento de gastos.`,
           timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+          ...extraProps,
         };
 
         setMessages((prev) => [...prev, iaiMsg]);
