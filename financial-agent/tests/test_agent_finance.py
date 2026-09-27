@@ -677,7 +677,7 @@ class FinanceContextTests(unittest.TestCase):
         from memory_store import memory_store
         client = TestClient(app)
         snapshot = {"status": {"estado": "fecha_bem", "encaminhar_atendimento": False}, "ritmo": {}}
-        test_session = f"session-memory-{datetime.now().timestamp()}"
+        test_session = f"session-memory-{datetime.now(UTC).timestamp()}"
 
         with patch.dict("os.environ", {"DEMO_MODE": "true"}), patch(
             "api.get_customer_snapshot", return_value=snapshot

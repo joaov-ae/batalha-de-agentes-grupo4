@@ -45,7 +45,7 @@ def _get_id_token(audience: str) -> str | None:
         token = id_token.fetch_id_token(GoogleAuthRequest(), audience)
         _token_cache[audience] = (token, now + 3000)
         return token
-    except Exception as exc:
+    except Exception as exc:  # noqa: BLE001
         logger.warning("Falha ao obter token de auth para observabilidade: %s", exc)
         return None
 
@@ -77,7 +77,7 @@ async def _post_evento(rota: str, payload: dict[str, Any]) -> bool:
                 logger.warning("Observabilidade retornou status %s para %s: %s", resp.status_code, rota, resp.text)
                 return False
             return True
-    except Exception as exc:
+    except Exception as exc:  # noqa: BLE001
         logger.warning("Falha ao emitir evento para observabilidade em %s: %s", rota, exc)
         return False
 

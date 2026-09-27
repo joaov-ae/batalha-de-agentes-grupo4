@@ -685,7 +685,7 @@ async def _pos_processar_chat(
                 mensagem_id=msg_agent_id,
                 codigo=codigo_agente,
             )
-    except Exception as exc:
+    except Exception as exc:  # noqa: BLE001
         logger.warning("[%s] Erro no pós-processamento de background do chat: %s", session_id, exc)
 
 
@@ -738,7 +738,7 @@ async def _pos_processar_analyze(
                 mensagem_id=msg_id,
                 veredito=exit_verdict,
             )
-    except Exception as exc:
+    except Exception as exc:  # noqa: BLE001
         logger.warning("[%s] Erro no pós-processamento do analyze: %s", session_id, exc)
 
 
@@ -783,7 +783,7 @@ async def _pos_processar_savings(
                 mensagem_id=msg_id,
                 veredito=exit_verdict,
             )
-    except Exception as exc:
+    except Exception as exc:  # noqa: BLE001
         logger.warning("[%s] Erro no pós-processamento do savings: %s", session_id, exc)
 
 
