@@ -1,0 +1,14 @@
+substitutions:
+  _IMAGE: us-central1-docker.pkg.dev/batalha-time-04-z85x/batalha-agentes/financial-agent:latest
+
+steps:
+  - name: gcr.io/cloud-builders/docker
+    args: ["build", "-t", "${_IMAGE}", "."]
+  - name: gcr.io/cloud-builders/docker
+    args: ["push", "${_IMAGE}"]
+
+images:
+  - "${_IMAGE}"
+
+options:
+  logging: CLOUD_LOGGING_ONLY
